@@ -66,7 +66,9 @@ def partitionOnFirstAux [DecidableEq α] (l : List α) (a : α) :
 def partitionOnFirst [DecidableEq α] (l : List α) (a : α) : List α × List α :=
   partitionOnFirstAux [] a l
 
-def parseExpression (ss : List String) : Expression := sorry
+-- todo
+def parseExpression (ss : List String) : Expression :=
+  Expression.var "my_var"
 
 def build : List (Nat × Option String) → Program
   | []            => Program.skip
@@ -90,10 +92,10 @@ def build : List (Nat × Option String) → Program
           Program.sequence prog (build ls)
       else let (wordsL, wordsR) := partitionOnFirst words "if"
         if wordsL.length < words.length then -- ifElse
-          sorry
+          Program.skip -- todo
         else let (wordsL, wordsR) := partitionOnFirst words "while"
           if wordsL.length < words.length then -- whileLoop
-            sorry
+            Program.skip -- todo
           else -- evaluation
             Program.sequence
               (Program.evaluation $ parseExpression words) (build ls)
@@ -101,3 +103,7 @@ termination_by _ f => SizeOf.sizeOf f
 
 def parse (s : String) : Program :=
   build $ parseLines s
+
+def p := parse "a := 1"
+
+#eval (p.run default).1.toList

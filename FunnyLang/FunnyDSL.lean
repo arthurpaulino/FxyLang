@@ -10,6 +10,7 @@ import Std
 inductive NEList (α : Type)
   | uno  : α → NEList α
   | cons : α → NEList α → NEList α
+  deriving Repr
 
 def List.toNEList [DecidableEq α] : (l : List α) → l ≠ [] → NEList α
   | [], h => by simp at h
@@ -28,7 +29,7 @@ mutual
     | list  : Array  Value  → Value
     | str   : String        → Value
     | curry : NEList String → Program → Value
-    deriving Inhabited
+    deriving Repr, Inhabited
 
   inductive Expression
     | atom : Value      → Expression
