@@ -1,1 +1,1 @@
-import FunnyLang.FunnyDSL
+import FunnyLang.Parser
