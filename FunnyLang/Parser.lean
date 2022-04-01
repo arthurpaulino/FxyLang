@@ -145,7 +145,9 @@ def metaParse (c : String) : MetaM (Option String × Program) := do
 def parse (c : String) (env : Environment) : IO (Option String × Program) := do
   Prod.fst <$> (metaParse c).run'.toIO {} {env}
 
-def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
+-- def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
+
+def code := "g q w := (f x y := 1); a := b; c := 6; y := 0"
 
 -- #exit
 #eval cleanseCode code

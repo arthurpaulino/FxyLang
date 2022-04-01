@@ -36,6 +36,7 @@ mutual
     | list  : Array  Value  → Value
     | str   : String        → Value
     | curry : NEList String → Program → Value
+    | error : String        → Value
     deriving Inhabited, Repr
 
   inductive Expression
@@ -60,6 +61,7 @@ mutual
     | ifElse      : Expression → Program → Program → Program
     | whileLoop   : Expression → Program → Program
     | evaluation  : Expression → Program
+    | err         : String     → Program
     deriving Inhabited, Repr
 
 end
@@ -94,6 +96,7 @@ mutual
     | list l => toString $ l.map fun v => valToString v
     | str s => s
     | curry _ p => progToString p
+    | error s => s
 
   partial def unfoldExpressions (es : NEList Expression) : String :=
     (es.toList.map fun e => expToString e).unfoldStrings
@@ -124,6 +127,7 @@ mutual
     | whileLoop e p => s!"{nSpaces l}while {expToString e} do\n{progToStringAux (l+2) p}"
     | ifElse e p q =>
       s!"{nSpaces l}if {expToString e} then\n{progToStringAux (l+2) p}\nelse\n{progToStringAux (l+2) q}"
+    | err s => s
 
   partial def progToString (p : Program) : String :=
     progToStringAux 0 p
@@ -148,13 +152,13 @@ def Value.add : Value → Value → Value
   | int   iL, int   iR => int   $ iL +  iR
   | float fL, float fR => float $ fL +  fR
   | list  lL, list  lR => list  $ lL ++ lR
-  | _,        _        => panic! "invalid application of '+'"
+  | _,        _        => error "invalid application of '+'"
 
 def Value.mul : Value → Value → Value
   | bool  bL, bool  bR => bool  $ bL && bR
   | int   iL, int   iR => int   $ iL *  iR
   | float fL, float fR => float $ fL *  fR
-  | _,        _        => panic! "invalid application of '*'"
+  | _,        _        => error "invalid application of '*'"
 
 partial def Value.eq : Value → Value → Value
   | bool  bL, bool  bR => bool $ bL = bR
@@ -166,35 +170,35 @@ partial def Value.eq : Value → Value → Value
       lL.zip lR |>.foldl (init := true) $ fun acc (l, r) =>
         acc && match l.eq r with | bool true => true | _ => false
     else false
-  | _,        _        => panic! "invalid application of '=' or '!='"
+  | _,        _        => error "invalid application of '=' or '!='"
 
 def Value.lt : Value → Value → Value
   | str   sL, str   sR => bool $ sL < sR
   | int   iL, int   iR => bool $ iL < iR
   | float fL, float fR => bool $ fL < fR
   | list  lL, list  lR => bool $ lL.size < lR.size
-  | _,        _        => panic! "invalid application of '<'"
+  | _,        _        => error "invalid application of '<'"
 
 def Value.le : Value → Value → Value
   | str   sL, str   sR => bool $ sL < sR || sL == sR
   | int   iL, int   iR => bool $ iL ≤ iR
   | float fL, float fR => bool $ fL ≤ fR
   | list  lL, list  lR => bool $ lL.size ≤ lR.size
-  | _,        _        => panic! "invalid application of '<='"
+  | _,        _        => error "invalid application of '<='"
 
 def Value.gt : Value → Value → Value
   | str   sL, str   sR => bool $ sL > sR
   | int   iL, int   iR => bool $ iL > iR
   | float fL, float fR => bool $ fL > fR
   | list  lL, list  lR => bool $ lL.size > lR.size
-  | _,        _        => panic! "invalid application of '>'"
+  | _,        _        => error "invalid application of '>'"
 
 def Value.ge : Value → Value → Value
   | str   sL, str   sR => bool $ sL > sR || sL == sR
   | int   iL, int   iR => bool $ iL ≥ iR
   | float fL, float fR => bool $ fL ≥ fR
   | list  lL, list  lR => bool $ lL.size ≥ lR.size
-  | _,        _        => panic! "invalid application of '>='"
+  | _,        _        => error "invalid application of '>='"
 
 def cantEvalAsBool (v : Value) := s!"can't evaluate {v} as boolean"
 
@@ -207,33 +211,33 @@ def consume (p : Program) :
   | NEList.uno n,     NEList.uno e     =>
     (none, sequence (attribution n (evaluation e)) p)
   | NEList.uno _,     NEList.cons _ _  =>
-    panic! "incompatible number of parameters"
+    (none, err "incompatible number of parameters")
 
 mutual
 
   partial def evaluate (ctx : Context) : Expression → Value
     | Expression.atom v    => v
     | Expression.var n     => match ctx[n] with
-      | none   => panic! s!"'{n}' not found"
+      | none   => error s!"'{n}' not found"
       | some v => v
     | Expression.not e => match evaluate ctx e with
       | Value.bool b => bool !b
-      | v            => panic! cantEvalAsBool v
+      | v            => error $ cantEvalAsBool v
     | Expression.add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
     | Expression.mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
     | Expression.app n es  => match ctx[n] with
-      | none   => panic! s!"'{n}' not found"
+      | none   => error s!"'{n}' not found"
       | some v => match v with
         | curry ns p =>
           let (ns?, p') := consume p ns es
           match ns? with
           | none => (p'.run ctx).2 -- actually executing the function program
           | some ns => curry ns p' -- there are still arguments to be fulfille
-        | _ => panic! s!"'{n}' is not a function"
+        | _ => error s!"'{n}' is not a function"
     | Expression.eq eL eR => (evaluate ctx eL).eq $ evaluate ctx eR
     | Expression.ne eL eR => match (evaluate ctx eL).eq $ evaluate ctx eR with
       | Value.bool b => bool !b
-      | v            => panic! cantEvalAsBool v
+      | v            => error $ cantEvalAsBool v
     | Expression.lt eL eR => (evaluate ctx eL).lt $ evaluate ctx eR
     | Expression.le eL eR => (evaluate ctx eL).le $ evaluate ctx eR
     | Expression.gt eL eR => (evaluate ctx eL).gt $ evaluate ctx eR
@@ -241,15 +245,20 @@ mutual
 
   partial def Program.run (ctx : Context) : Program → Context × Value
     | skip           => (ctx, nil)
-    | sequence p₁ p₂ => p₂.run (p₁.run ctx).1
+    | sequence p₁ p₂ =>
+      let res := p₁.run ctx
+      match res.2 with
+      | error _ => res
+      | _       => p₂.run res.1
     | attribution name p => (ctx.insert name (p.run ctx).2, nil)
     | ifElse e pT pF => match evaluate ctx e with
       | Value.bool b => if b then pT.run ctx else pF.run ctx
-      | v            => panic! cantEvalAsBool v
+      | v            => (ctx, error $ cantEvalAsBool v)
     | whileLoop e p  => match evaluate ctx e with
       | Value.bool b => if !b then (ctx, nil) else
         (Program.whileLoop e p).run (p.run ctx).1
-      | v            => panic! cantEvalAsBool v
+      | v            => (ctx, error $ cantEvalAsBool v)
     | evaluation e   => (ctx, (evaluate ctx e))
+    | err s          => (ctx, error s)
 
 end
