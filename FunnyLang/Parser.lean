@@ -31,26 +31,28 @@ syntax ("-" noWs)? num : value
 syntax str : value
 syntax "true" : value
 syntax "false" : value
+syntax ("-" noWs)? num noWs "." (noWs num)? : value
+syntax " [ " value* " ] " : value
 
 declare_syntax_cat expression
-syntax value : expression -- atom
-syntax expression " + " expression : expression -- add
-syntax expression " * " expression : expression -- mul
-syntax " ! " expression : expression -- not
-syntax expression " = " expression : expression -- eq
-syntax expression " != " expression : expression -- ne
-syntax expression " < " expression : expression -- lt
-syntax expression " <= " expression : expression -- le
-syntax expression " > " expression : expression -- gt
-syntax expression " >= " expression : expression -- ge
-syntax ident expression* : expression -- var / app
+syntax value : expression
+syntax expression " + " expression : expression
+syntax expression " * " expression : expression
+syntax " ! " expression : expression
+syntax expression " = " expression : expression
+syntax expression " != " expression : expression
+syntax expression " < " expression : expression
+syntax expression " <= " expression : expression
+syntax expression " > " expression : expression
+syntax expression " >= " expression : expression
+syntax ident expression* : expression
 syntax " ( " expression " ) " : expression
 
 declare_syntax_cat program
-syntax "skip" : program -- skip
-syntax:25 program " ; " program : program -- sequence
-syntax ident ident* " := " program:75 : program -- attribution
-syntax expression : program -- evaluation
+syntax "skip" : program
+syntax:25 program " ; " program : program
+syntax ident ident* " := " program:75 : program
+syntax expression : program
 syntax "if" expression "then" program "else" program : program
 syntax "while" expression "do" program : program
 syntax " ( " program " ) " : program
@@ -59,7 +61,7 @@ open Lean Parser
 
 def elabValue : Syntax → Except String Value
   | `(value|$x:numLit) => return Value.int x.toNat
-  | _ => throw "parse error"
+  | _ => throw "error: can't parse value"
 
 partial def elabExpression : Syntax → Except String Expression
   | `(expression| $x:value) =>
@@ -88,7 +90,7 @@ partial def elabExpression : Syntax → Except String Expression
   | `(expression| $x:expression >= $y:expression) =>
     return Expression.ge (← elabExpression x) (← elabExpression y)
   | `(expression| ($x:expression)) => elabExpression x
-  | _ => throw "parse error"
+  | _ => throw "error: can't parse expression"
 
 partial def elabProgram : Syntax → Except String Program
   | `(program| skip) =>
@@ -110,14 +112,11 @@ partial def elabProgram : Syntax → Except String Program
   | `(program| $x:expression) =>
     return Program.evaluation (← elabExpression x)
   | `(program| ($p:program)) => elabProgram p
-  | _ => throw "parse error"
+  | _ => throw "error: can't parse program"
 
 partial def parseProgram (env : Environment) (s : String) :
     Except String Program := do
-  let rec parseCore
-  | `(program| $x:program) => return (← elabProgram x)
-  | _ => throw "parse error"
-  parseCore (← runParserCategory env `program s)
+  elabProgram (← runParserCategory env `program s)
 
 def joinedOn (on : String) : List String → String
   | []            => ""
@@ -145,9 +144,8 @@ def metaParse (c : String) : MetaM (Option String × Program) := do
 def parse (c : String) (env : Environment) : IO (Option String × Program) := do
   Prod.fst <$> (metaParse c).run'.toIO {} {env}
 
--- def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
-
-def code := "f x y := x + y; f3 := f 3; f32 := f3 2; a"
+def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
+-- def code := "f x y := x + y; f3 := f 3; f32 := f3 2; a"
 
 -- #exit
 #eval cleanseCode code

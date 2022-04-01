@@ -20,7 +20,7 @@ def List.toNEList : (l : List α) → ¬ l.isEmpty → NEList α
       else NEList.uno a
 
 def NEList.toList : NEList α → List α
-  | uno a    => [a]
+  | uno  a   => [a]
   | cons a b => a :: b.toList
 
 def List.unfoldStrings (l : List String) : String :=
@@ -33,7 +33,7 @@ mutual
     | bool  : Bool          → Value
     | int   : Int           → Value
     | float : Float         → Value
-    | list  : Array  Value  → Value
+    | list  : Array Value   → Value
     | str   : String        → Value
     | curry : NEList String → Program → Value
     | error : String        → Value
@@ -73,11 +73,12 @@ def Program.getCurryNames? : Program → Option (NEList String)
   | sequence (attribution _ (evaluation (atom (curry ns _)))) _ => some ns
   | _                                                           => none
 
-def nSpaces (n : Nat) : String := Id.run do
-  let mut s := ""
-  for i in [0:n] do
-    s := s ++ " "
-  s
+def nSpacesAux (cs : List Char) : Nat → List Char
+  | 0     => cs
+  | n + 1 => ' ' :: ' ' :: cs
+
+def nSpaces (n : Nat) : String :=
+  ⟨nSpacesAux [] n⟩
 
 def Program.lengthAux (n : Nat) : Program → Nat
   | Program.sequence _ q => q.lengthAux (n + 1)
@@ -170,7 +171,19 @@ partial def Value.eq : Value → Value → Value
       lL.zip lR |>.foldl (init := true) $ fun acc (l, r) =>
         acc && match l.eq r with | bool true => true | _ => false
     else false
-  | _,        _        => error "invalid application of '=' or '!='"
+  | _,        _        => bool false
+
+partial def Value.ne : Value → Value → Value
+  | bool  bL, bool  bR => bool $ bL ≠ bR
+  | str   sL, str   sR => bool $ sL ≠ sR
+  | int   iL, int   iR => bool $ iL ≠ iR
+  | float fL, float fR => bool $ !(fL == fR)
+  | list  lL, list  lR => bool $
+    if lL.size = lR.size then
+      lL.zip lR |>.foldl (init := false) $ fun acc (l, r) =>
+        acc || match l.ne r with | bool true => true | _ => false
+    else true
+  | _,        _        => bool true
 
 def Value.lt : Value → Value → Value
   | str   sL, str   sR => bool $ sL < sR
@@ -235,9 +248,7 @@ mutual
           | some ns => curry ns p' -- there are still arguments to be fulfille
         | _ => error s!"'{n}' is not a function"
     | Expression.eq eL eR => (evaluate ctx eL).eq $ evaluate ctx eR
-    | Expression.ne eL eR => match (evaluate ctx eL).eq $ evaluate ctx eR with
-      | Value.bool b => bool !b
-      | v            => error $ cantEvalAsBool v
+    | Expression.ne eL eR => (evaluate ctx eL).ne $ evaluate ctx eR
     | Expression.lt eL eR => (evaluate ctx eL).lt $ evaluate ctx eR
     | Expression.le eL eR => (evaluate ctx eL).le $ evaluate ctx eR
     | Expression.gt eL eR => (evaluate ctx eL).gt $ evaluate ctx eR
