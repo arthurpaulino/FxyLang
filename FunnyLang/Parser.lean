@@ -15,7 +15,7 @@ def mkValue : Syntax → Except String Value
   | _ => throw "error: can't parse value"
 
 partial def mkExpression : Syntax → Except String Expression
-  | `(expression| $v:value)        => return .atom (← mkValue v)
+  | `(expression| $v:value)       => return .atom (← mkValue v)
   | `(expression| !$e:expression) => return .not (← mkExpression e)
   | `(expression| $n:ident $[$es:expression]*) => do
     let es ← es.data.mapM mkExpression
