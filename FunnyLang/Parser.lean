@@ -18,7 +18,7 @@ partial def mkExpression : Syntax → Except String Expression
   | `(expression| $v:value)        => return .atom (← mkValue v)
   | `(expression| !$e:expression) => return .not (← mkExpression e)
   | `(expression| $n:ident $[$es:expression]*) => do
-    let es := (← es.mapM mkExpression).data
+    let es ← es.data.mapM mkExpression
     if h : ¬ es.isEmpty
       then return .app n.getId.toString (es.toNEList h)
       else return .var n.getId.toString
@@ -47,7 +47,7 @@ partial def mkProgram : Syntax → Except String Program
   | `(program| $p:program; $q:program) =>
     return .sequence (← mkProgram p) (← mkProgram q)
   | `(program| $n:ident $ns:ident* := $p:program) =>
-    let ns := (ns.map $ fun i => i.getId.toString).data
+    let ns := ns.data.map $ fun i => i.getId.toString
     if h : ¬ ns.isEmpty
       then return .attribution n.getId.toString $
         .evaluation $ .atom $
@@ -93,8 +93,8 @@ def parse (c : String) (env : Environment) : IO (Option String × Program) := do
   Prod.fst <$> (metaParse c).run'.toIO {} {env}
 
 -- def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
--- def code := "f x y := x + y; f3 := f 3; f32 := f3 2; a"
-def code := "a := 1 + 1; a = 2"
+def code := "f x y := x + y; f3 := f 3; f32 := f3 2; a"
+-- def code := "a := 1 + 1; a = 2"
 
 #eval show MetaM _ from do
   let p := parseProgram (← getEnv) (cleanseCode code)
