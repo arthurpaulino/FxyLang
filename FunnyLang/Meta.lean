@@ -26,10 +26,10 @@ partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| ! $e:expression) => do
     mkAppM ``Expression.not #[← elabExpression e]
   | `(expression| $n:ident $[$es:expression]*) => do
-    let es := (← es.mapM elabExpression).data
-    if h : ¬ es.isEmpty then -- fix: make an expression for `es.toNEList h`
-      let eh? := mkConst `sorry
-      mkAppM ``Expression.app #[elabStringOfIdent n, eh?]
+    let es ← es.data.mapM elabExpression
+    if h : ¬ es.isEmpty then
+      let l ← mkListLit (mkConst ``Expression) es -- term of type `List Expression`
+      mkAppM ``Expression.app #[elabStringOfIdent n, l]
     else mkAppM ``Expression.var #[elabStringOfIdent n]
   | `(expression| $l:expression + $r:expression) => do
     mkAppM ``Expression.add #[← elabExpression l, ← elabExpression r]
@@ -55,15 +55,14 @@ partial def elabProgram : Syntax → TermElabM Expr
   | `(program| $p:program; $q:program) => do
     mkAppM ``Program.sequence #[← elabProgram p, ← elabProgram q]
   | `(program| $n:ident $ns:ident* := $p:program) => do
-    let ns := (ns.map elabStringOfIdent).data
+    let ns := ns.data.map elabStringOfIdent
     if h : ¬ ns.isEmpty then
-      -- fix: make an expression for `ns.toNEList h`
-      let eh? := mkConst `sorry
+      let l ← mkListLit (mkConst ``String) ns -- term of type `List String`
       mkAppM ``Program.attribution #[
         elabStringOfIdent n,
         mkApp' ``Program.evaluation $
           mkApp' ``Expression.atom $
-            ← mkAppM ``Value.curry #[eh?, ← elabProgram p]
+            ← mkAppM ``Value.curry #[l, ← elabProgram p]
       ]
       else mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
   | `(program| if $e:expression then $p:program else $q:program) => do
@@ -78,6 +77,5 @@ partial def elabProgram : Syntax → TermElabM Expr
 
 elab ">>" ppLine p:program ppLine "<<" : term => elabProgram p
 
-#eval >>
-x := 2; x = x
-<<.run
+#eval >> f x y := 0 <<.run
+#eval >> f 1 1 <<.run
