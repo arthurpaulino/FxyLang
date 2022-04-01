@@ -6,117 +6,65 @@
 
 import Lean
 import FunnyLang.AST
+import FunnyLang.Syntax
 
-/-! example
-a := 4         # int
+open Lean
 
-f x y := x + y # function _ → _ → _
-
-fa := f a      # function int → int
-
-fa3 := fa 3    # 7 : int
-
-g n :=
-  s := 0
-  while > 0
-    s := s + n
-    n := n - 1
-  s
-
-print g 5      # 15
--/
-
-declare_syntax_cat value
-syntax ("-" noWs)? num : value
-syntax str : value
-syntax "true" : value
-syntax "false" : value
-syntax ("-" noWs)? num noWs "." (noWs num)? : value
-syntax " [ " value* " ] " : value
-
-declare_syntax_cat expression
-syntax value : expression
-syntax expression " + " expression : expression
-syntax expression " * " expression : expression
-syntax " ! " expression : expression
-syntax expression " = " expression : expression
-syntax expression " != " expression : expression
-syntax expression " < " expression : expression
-syntax expression " <= " expression : expression
-syntax expression " > " expression : expression
-syntax expression " >= " expression : expression
-syntax ident expression* : expression
-syntax " ( " expression " ) " : expression
-
-declare_syntax_cat program
-syntax "skip" : program
-syntax:25 program " ; " program : program
-syntax ident ident* " := " program:75 : program
-syntax expression : program
-syntax "if" expression "then" program "else" program : program
-syntax "while" expression "do" program : program
-syntax " ( " program " ) " : program
-
-open Lean Parser
-
-def elabValue : Syntax → Except String Value
-  | `(value|$x:numLit) => return Value.int x.toNat
+def mkValue : Syntax → Except String Value
+  | `(value|$n:numLit) => return .int n.toNat
   | _ => throw "error: can't parse value"
 
-partial def elabExpression : Syntax → Except String Expression
-  | `(expression| $x:value) =>
-    return Expression.atom (← elabValue x)
-  | `(expression| $x:expression + $y:expression) =>
-    return Expression.add (← elabExpression x) (← elabExpression y)
-  | `(expression| $x:expression * $y:expression) =>
-    return Expression.mul (← elabExpression x) (← elabExpression y)
-  | `(expression| ! $x:expression) =>
-    return Expression.not (← elabExpression x)
-  | `(expression| $x:ident $[$ys:expression]*) => do
-    let ys := (← ys.mapM elabExpression).data
-    if h : ¬ ys.isEmpty
-      then return Expression.app x.getId.toString (ys.toNEList h)
-      else return Expression.var x.getId.toString
-  | `(expression| $x:expression = $y:expression) =>
-    return Expression.eq (← elabExpression x) (← elabExpression y)
-  | `(expression| $x:expression != $y:expression) =>
-    return Expression.ne (← elabExpression x) (← elabExpression y)
-  | `(expression| $x:expression < $y:expression) =>
-    return Expression.lt (← elabExpression x) (← elabExpression y)
-  | `(expression| $x:expression <= $y:expression) =>
-    return Expression.le (← elabExpression x) (← elabExpression y)
-  | `(expression| $x:expression > $y:expression) =>
-    return Expression.gt (← elabExpression x) (← elabExpression y)
-  | `(expression| $x:expression >= $y:expression) =>
-    return Expression.ge (← elabExpression x) (← elabExpression y)
-  | `(expression| ($x:expression)) => elabExpression x
+partial def mkExpression : Syntax → Except String Expression
+  | `(expression| $v:value)        => return .atom (← mkValue v)
+  | `(expression| !$e:expression) => return .not (← mkExpression e)
+  | `(expression| $n:ident $[$es:expression]*) => do
+    let es := (← es.mapM mkExpression).data
+    if h : ¬ es.isEmpty
+      then return .app n.getId.toString (es.toNEList h)
+      else return .var n.getId.toString
+  | `(expression| $l:expression + $r:expression) =>
+    return .add (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression * $r:expression) =>
+    return .mul (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression = $r:expression) =>
+    return .eq (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression != $r:expression) =>
+    return .ne (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression < $r:expression) =>
+    return .lt (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression <= $r:expression) =>
+    return .le (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression > $r:expression) =>
+    return .gt (← mkExpression l) (← mkExpression r)
+  | `(expression| $l:expression >= $r:expression) =>
+    return .ge (← mkExpression l) (← mkExpression r)
+  | `(expression| ($e:expression)) => mkExpression e
   | _ => throw "error: can't parse expression"
 
-partial def elabProgram : Syntax → Except String Program
+partial def mkProgram : Syntax → Except String Program
   | `(program| skip) =>
     return Program.skip
-  | `(program| $x:program; $y:program) =>
-    return Program.sequence (← elabProgram x) (← elabProgram y)
-  | `(program| $x:ident $xs:ident* := $y:program) =>
-    let xs := (xs.map $ fun i => i.getId.toString).data
-    if h : ¬ xs.isEmpty
-      then return Program.attribution x.getId.toString $
-        Program.evaluation $ Expression.atom $
-          Value.curry (xs.toNEList h) (← elabProgram y)
-      else return Program.attribution x.getId.toString (← elabProgram y)
+  | `(program| $p:program; $q:program) =>
+    return .sequence (← mkProgram p) (← mkProgram q)
+  | `(program| $n:ident $ns:ident* := $p:program) =>
+    let ns := (ns.map $ fun i => i.getId.toString).data
+    if h : ¬ ns.isEmpty
+      then return .attribution n.getId.toString $
+        .evaluation $ .atom $
+          .curry (ns.toNEList h) (← mkProgram p)
+      else return .attribution n.getId.toString (← mkProgram p)
   | `(program| if $e:expression then $p:program else $q:program) =>
-    return Program.ifElse (← elabExpression e) (← elabProgram p)
-      (← elabProgram q)
+    return .ifElse (← mkExpression e)
+      (← mkProgram p) (← mkProgram q)
   | `(program| while $e:expression do $p:program) =>
-    return Program.whileLoop (← elabExpression e) (← elabProgram p)
-  | `(program| $x:expression) =>
-    return Program.evaluation (← elabExpression x)
-  | `(program| ($p:program)) => elabProgram p
+    return .whileLoop (← mkExpression e) (← mkProgram p)
+  | `(program| $e:expression) =>
+    return .evaluation (← mkExpression e)
+  | `(program| ($p:program)) => mkProgram p
   | _ => throw "error: can't parse program"
 
-partial def parseProgram (env : Environment) (s : String) :
-    Except String Program := do
-  elabProgram (← runParserCategory env `program s)
+partial def parseProgram : Environment → String → Except String Program
+  | env, s => do mkProgram (← Parser.runParserCategory env `program s)
 
 def joinedOn (on : String) : List String → String
   | []            => ""
@@ -138,26 +86,26 @@ def cleanseCode (c : String) : String :=
 
 def metaParse (c : String) : MetaM (Option String × Program) := do
   match parseProgram (← getEnv) (cleanseCode c) with
-  | Except.error msg => return (some msg, default)
-  | Except.ok p      => return (none, p)
+  | .error msg => return (some msg, default)
+  | .ok    p   => return (none, p)
 
 def parse (c : String) (env : Environment) : IO (Option String × Program) := do
   Prod.fst <$> (metaParse c).run'.toIO {} {env}
 
-def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
+-- def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
 -- def code := "f x y := x + y; f3 := f 3; f32 := f3 2; a"
+def code := "a := 1 + 1; a = 2"
 
--- #exit
-#eval cleanseCode code
 #eval show MetaM _ from do
   let p := parseProgram (← getEnv) (cleanseCode code)
   match p with
     | Except.ok p =>
-      let (c, r) := p.run default
+      let (c, r) := p.run
       IO.println r
-      IO.println "-------------"
+      IO.println "------context-------"
       IO.println c
-      IO.println "-------------"
+      IO.println "------program-------"
       IO.println p
+      IO.println "--------AST---------"
     | _ => pure ()
   return p
