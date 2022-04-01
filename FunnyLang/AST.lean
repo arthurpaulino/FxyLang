@@ -23,10 +23,8 @@ def NEList.toList : NEList α → List α
   | uno a    => [a]
   | cons a b => a :: b.toList
 
-protected def NEList.toString [ToString α] (l : NEList α) : String :=
-  l.toList.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
-
-instance [ToString α] : ToString (NEList α) := ⟨NEList.toString⟩
+def List.unfoldStrings (l : List String) : String :=
+  l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
 
 mutual
 
@@ -66,35 +64,12 @@ mutual
 
 end
 
-protected partial def Value.toString : Value → String
-  | nil => "nil"
-  | bool b => toString b
-  | int i => toString i
-  | float f => toString f
-  | list l => toString $ l.map fun v => Value.toString v
-  | str s => s
-  | curry _ _ => "uncuried function"
+open Value Expression Program
 
-instance : ToString Value := ⟨Value.toString⟩
-
-partial def Expression.toString : Expression → String
-  | atom v => v.toString
-  | var n  => n
-  | not e => s!"(! {e.toString})"
-  | add l r => s!"({l.toString} + {r.toString})"
-  | mul l r => s!"({l.toString} * {r.toString})"
-  | app n es =>
-    let q := es.toList.map fun e => e.toString
-    let q := q.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
-    s!"{n} {q}"
-  | eq l r => s!"({l.toString} = {r.toString})"
-  | ne l r => s!"({l.toString} != {r.toString})"
-  | lt l r => s!"({l.toString} < {r.toString})"
-  | le l r => s!"({l.toString} <= {r.toString})"
-  | gt l r => s!"({l.toString} > {r.toString})"
-  | ge l r => s!"({l.toString} >= {r.toString})"
-
-instance : ToString Expression := ⟨Expression.toString⟩
+def Program.getCurryNames? : Program → Option (NEList String)
+  | evaluation (atom (curry ns _))                              => some ns
+  | sequence (attribution _ (evaluation (atom (curry ns _)))) _ => some ns
+  | _                                                           => none
 
 def nSpaces (n : Nat) : String := Id.run do
   let mut s := ""
@@ -102,32 +77,68 @@ def nSpaces (n : Nat) : String := Id.run do
     s := s ++ " "
   s
 
-partial def Program.lengthAux (n : Nat) : Program → Nat
+def Program.lengthAux (n : Nat) : Program → Nat
   | Program.sequence _ q => q.lengthAux (n + 1)
   | _ => n + 1
 
-partial def Program.length (p : Program) : Nat :=
+def Program.length (p : Program) : Nat :=
   p.lengthAux 0
 
-partial def Program.toStringAux (l : Nat) : Program → String
-  | skip => s!"{nSpaces l}skip"
-  | sequence p q => s!"{nSpaces l}{p.toStringAux l};\n{q.toStringAux l}"
-  | attribution n p => s!"{nSpaces l}{n} :=\n{p.toStringAux (l+2)}"
-  | evaluation e => s!"{nSpaces l}{e}"
-  | whileLoop e p => s!"{nSpaces l}while {e} do\n{p.toStringAux (l+2)}"
-  | ifElse e p q =>
-    s!"{nSpaces l}if {e} then\n{p.toStringAux (l+2)}\nelse\n{q.toStringAux (l+2)}"
+mutual
 
-partial def Program.toString (p : Program) : String :=
-  p.toStringAux 0
+  partial def valToString : Value → String
+    | nil => "nil"
+    | Value.bool b => toString b
+    | int i => toString i
+    | float f => toString f
+    | list l => toString $ l.map fun v => valToString v
+    | str s => s
+    | curry _ p => progToString p
 
-instance : ToString Program := ⟨Program.toString⟩
+  partial def unfoldExpressions (es : NEList Expression) : String :=
+    (es.toList.map fun e => expToString e).unfoldStrings
+
+  partial def expToString : Expression → String
+    | atom v => valToString v
+    | var n  => n
+    | Expression.not e => s!"(! {expToString e})"
+    | add l r => s!"({expToString l} + {expToString r})"
+    | mul l r => s!"({expToString l} * {expToString r})"
+    | app n es => s!"{n} {unfoldExpressions es}"
+    | eq l r => s!"({expToString l} = {expToString r})"
+    | ne l r => s!"({expToString l} != {expToString r})"
+    | lt l r => s!"({expToString l} < {expToString r})"
+    | le l r => s!"({expToString l} <= {expToString r})"
+    | gt l r => s!"({expToString l} > {expToString r})"
+    | ge l r => s!"({expToString l} >= {expToString r})"
+
+  partial def progToStringAux (l : Nat) : Program → String
+    | skip => s!"{nSpaces l}skip"
+    | sequence p q => s!"{nSpaces (l-2)}{progToStringAux l p}\n{progToStringAux l q}"
+    | attribution n p =>
+      let pString := if p.length > 1 then s!"\n{progToStringAux (l+2) p}" else s!" {progToStringAux (l-2) p}"
+      match p.getCurryNames? with
+      | none    => s!"{nSpaces l}{n} :=" ++ pString
+      | some ns => s!"{nSpaces l}{n} {ns.toList.unfoldStrings} :=" ++ pString
+    | evaluation e => s!"{nSpaces l}{expToString e}"
+    | whileLoop e p => s!"{nSpaces l}while {expToString e} do\n{progToStringAux (l+2) p}"
+    | ifElse e p q =>
+      s!"{nSpaces l}if {expToString e} then\n{progToStringAux (l+2) p}\nelse\n{progToStringAux (l+2) q}"
+
+  partial def progToString (p : Program) : String :=
+    progToStringAux 0 p
+
+end
+
+instance : ToString Value      := ⟨valToString⟩
+instance : ToString Expression := ⟨expToString⟩
+instance : ToString Program    := ⟨progToString⟩
 
 abbrev Context := Std.HashMap String Value
 
 protected def Context.toString (c : Context) : String :=
   (c.toList.foldl (init := "")
-    fun acc (var, val) => acc ++ s!"{var}:\t{val}\n").trimRight
+    fun acc (n, val) => acc ++ s!"{n}:\t{val}\n").trimRight
 
 instance : ToString Context := ⟨Context.toString⟩
 
@@ -186,8 +197,6 @@ def Value.ge : Value → Value → Value
   | _,        _        => panic! "invalid application of '>='"
 
 def cantEvalAsBool (v : Value) := s!"can't evaluate {v} as boolean"
-
-open Value Program
 
 def consume (p : Program) :
     NEList String → NEList Expression → (Option (NEList String)) × Program

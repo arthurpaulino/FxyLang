@@ -49,10 +49,10 @@ syntax " ( " expression " ) " : expression
 declare_syntax_cat program
 syntax "skip" : program -- skip
 syntax:25 program " ; " program : program -- sequence
-syntax withPosition(ident ident* " := " colGt program:75) : program -- attribution
+syntax ident ident* " := " program:75 : program -- attribution
 syntax expression : program -- evaluation
-syntax withPosition("if" expression "then" (colGt program) "else" (colGt program)) : program
-syntax withPosition("while" expression "do" colGt program) : program
+syntax "if" expression "then" program "else" program : program
+syntax "while" expression "do" program : program
 syntax " ( " program " ) " : program
 
 open Lean Parser
@@ -145,11 +145,10 @@ def metaParse (c : String) : MetaM (Option String × Program) := do
 def parse (c : String) (env : Environment) : IO (Option String × Program) := do
   Prod.fst <$> (metaParse c).run'.toIO {} {env}
 
-def code := "
-s := 0; a := 0; while a < 5 do a := a + 1; s := s + a; s"
+def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
 
+-- #exit
 #eval cleanseCode code
-
 #eval show MetaM _ from do
   let p := parseProgram (← getEnv) (cleanseCode code)
   match p with
