@@ -250,7 +250,11 @@ mutual
       match res.2 with
       | error _ => res
       | _       => p₂.run res.1
-    | attribution name p => (ctx.insert name (p.run ctx).2, nil)
+    | attribution name p =>
+      let res := p.run ctx
+      match res.2 with
+      | error _ => res
+      | _       => (ctx.insert name res.2, nil)
     | ifElse e pT pF => match evaluate ctx e with
       | Value.bool b => if b then pT.run ctx else pF.run ctx
       | v            => (ctx, error $ cantEvalAsBool v)

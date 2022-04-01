@@ -147,7 +147,7 @@ def parse (c : String) (env : Environment) : IO (Option String × Program) := do
 
 -- def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
 
-def code := "g q w := (f x y := 1); a := b; c := 6; y := 0"
+def code := "f x y := x + y; f3 := f 3; f32 := f3 2; a"
 
 -- #exit
 #eval cleanseCode code
