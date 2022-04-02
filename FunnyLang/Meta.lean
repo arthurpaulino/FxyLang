@@ -31,14 +31,15 @@ syntax expression " >= " expression : expression
 syntax ident expression*            : expression
 syntax " ( " expression " ) "       : expression
 
-declare_syntax_cat                                     program
-syntax "skip"                                        : program
-syntax:25 program " ; " program                      : program
-syntax ident+ " := " program:75                      : program
-syntax expression                                    : program
-syntax "if" expression "then" program "else" program : program
-syntax "while" expression "do" program               : program
-syntax " ( " program " ) "                           : program
+declare_syntax_cat                                           program
+syntax "skip"                                              : program
+syntax:25 program program                                  : program
+syntax withPosition(ident+ " := " colGt program:75)        : program
+syntax expression                                          : program
+syntax withPosition("if" expression (colGt "then"
+  program) "else" (colGt program))                         : program
+syntax withPosition("while" expression "do" colGt program) : program
+syntax " ( " program " ) "                                 : program
 
 open Lean Elab Meta
 
@@ -86,7 +87,7 @@ partial def elabExpression : Syntax → TermElabM Expr
 
 partial def elabProgram : Syntax → TermElabM Expr
   | `(program| skip) => return mkConst ``Program.skip
-  | `(program| $p:program; $q:program) => do
+  | `(program| $p:program $q:program) => do
     mkAppM ``Program.sequence #[← elabProgram p, ← elabProgram q]
   | `(program| $n:ident $ns:ident* := $p:program) => do
     match ns.data.map elabStringOfIdent with
@@ -111,12 +112,108 @@ partial def elabProgram : Syntax → TermElabM Expr
   | `(program| ($p:program)) => elabProgram p
   | _ => throwUnsupportedSyntax
 
+------- ↓↓ testing area ↓↓
+
 elab ">>" ppLine p:program ppLine "<<" : term => elabProgram p
 
-#eval >>
-f x y := 0
+open Lean.Elab.Command Lean.Elab.Term in
+elab "#assert " x:term:60 " = " y:term:60 : command =>
+  liftTermElabM `assert do
+    let x ← elabTerm x none
+    let y ← elabTerm y none
+    synthesizeSyntheticMVarsNoPostponing
+    unless (← isDefEq x y) do
+      throwError "{← reduce y}\n------------------------\n{← reduce x}"
+
+def p1 := >>
+min x y :=
+  if x < y
+    then x
+    else y
+min 5 3
 <<.toString
 
-#eval >>
-f x y := x + y; f3 := f 3; f32 := f3 2
+def p2 := >>
+(min x y :=
+  if x < y
+    then x
+    else y)
+min 5 3
 <<.toString
+
+#assert p1 = p2
+
+def p3 := >>
+while 1 < a do
+  x := 2
+a < 3
+<<.toString
+
+def p4 := >>
+while 1 < a do x := 2
+a < 3
+<<.toString
+
+def p5 := >>
+(while 1 < a do x := 2)
+a < 3
+<<.toString
+
+#assert p3 = p4
+#assert p4 = p5
+
+def p6 := >>
+(f x y :=
+  x + y)
+(f3 := f 3)
+f32 := f3 2
+<<.toString
+
+def p7 := >>
+(f x y := x + y)
+(f3 := f 3)
+f32 := f3 2
+<<.toString
+
+#assert p6 = p7
+
+def p8 := >>
+f x y := x + y
+f3 := f 3
+f32 := f3 2
+<<.toString
+
+#assert p7 = p8
+
+
+def p9 := >>
+a :=
+  x := 5
+  y = 5
+2 + 5
+<<.toString
+
+def p9' := >>
+(a :=
+  x := 5
+  y = 5)
+2 + 5
+<<.toString
+
+def p10 := >>
+a :=
+  (x := 5
+  y = 5)
+2 + 5
+<<.toString
+
+def p11 := >>
+(a :=
+  ((x := 5)
+  y = 5))
+2 + 5
+<<.toString
+
+#assert p9 = p9'
+#assert p9 = p10
+#assert p10 = p11
