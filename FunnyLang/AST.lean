@@ -12,43 +12,40 @@ inductive NEList (α : Type)
   | cons : α → NEList α → NEList α
   deriving Repr
 
-def List.toNEList : (l : List α) → ¬ l.isEmpty → NEList α
-  | [], h => by simp [isEmpty] at h
-  | a :: b, _ =>
-    if h : ¬ b.isEmpty
-      then NEList.cons a $ b.toNEList h
-      else NEList.uno a
+def List.toNEList (a : α) : List α → NEList α
+  | []      => .uno a
+  | b :: bs => .cons a (toNEList b bs)
 
 def NEList.toList : NEList α → List α
   | uno  a   => [a]
   | cons a b => a :: b.toList
 
-def NEList.concat : NEList α → α → NEList α
-  | cons a b, x => cons a $ concat b x
-  | uno  a,   x => cons a $ uno x
+def isEq : NEList α → List α → Prop
+  | .cons a as, b :: bs => a = b ∧ isEq as bs
+  | .uno  a   , [b]     => a = b
+  | _,          _       => False
 
-def NEList.append (l : NEList α) : NEList α → NEList α
-  | cons a b => l.concat a |>.append b
-  | uno  a   => l.concat a
+theorem ListToNEListIsEqList {a : α} {as : List α} :
+    isEq (as.toNEList a) (a :: as) := by
+  induction as with
+  | nil            => rw [List.toNEList, isEq]
+  | cons a' as' hi =>
+    cases as' with
+    | nil      => simp only [List.toNEList, isEq]
+    | cons _ _ =>
+      simp [List.toNEList, isEq] at hi ⊢
+      exact hi
 
-theorem NEListToListEqListOfNonEmpty {l : List α} [BEq α] (h : ¬ l.isEmpty) :
-    (l.toNEList h).toList = l := by
-  induction l with
-  | nil         => simp only [List.isEmpty] at h
-  | cons _ t hi =>
-    by_cases he : List.isEmpty t
-    · have : t = [] := by
-        match t with
-        | []     => rfl
-        | _ :: _ => simp only [List.isEmpty] at he
-      simp only [this, NEList.toList]
-    · simp only [NEList.toList, List.toNEList, he, hi he]
-
-/-! # TODO
-Similarly, prove theorems about `concat` and `append`, using the implementations
-from `List` as the ground truth and the back and forth translations between
-`List` and `NEList`.
--/
+theorem NEListToListEqList {a : α} {as : List α} :
+    (as.toNEList a).toList = a :: as := by
+  induction as with
+  | nil           => rw [List.toNEList, NEList.toList]
+  | cons _ as' hi =>
+    cases as' with
+    | nil      => simp only [List.toNEList, NEList.toList]
+    | cons _ _ =>
+      simp [List.toNEList, NEList.toList] at hi ⊢
+      exact hi
 
 def List.unfoldStrings (l : List String) : String :=
   l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
@@ -180,16 +177,16 @@ def Program.length (p : Program) : Nat :=
   p.lengthAux 0
 
 def Value.add : Value → Value → Value
-  | error s,     _           => error s
-  | _,           error s     => error s
-  | bool  bL,    bool  bR    => bool  $ bL || bR
-  | str   sL,    str   sR    => str   $ sL ++ sR
-  | int   iL,    int   iR    => int   $ iL +  iR
-  | float fL,    float fR    => float $ fL +  fR
-  | list  lL,    list  lR    => list  $ lL ++ lR
-  | list  lL,    vR          => list  $ lL.push vR
-  | curry nsL p, curry nsR q => curry (nsL.append nsR) (sequence p q)
-  | l,           r           =>
+  | error s,  _        => error s
+  | _,        error s  => error s
+  | bool  bL, bool  bR => bool  $ bL || bR
+  | str   sL, str   sR => str   $ sL ++ sR
+  | int   iL, int   iR => int   $ iL +  iR
+  | float fL, float fR => float $ fL +  fR
+  | list  lL, list  lR => list  $ lL ++ lR
+  | list  lL, vR       => list  $ lL.push vR
+  | curry .., curry .. => error "can't sum functions"
+  | l,        r        =>
     error s!"invalid application of '+' between\n{l}\nand\n{r}"
 
 def Value.mul : Value → Value → Value
@@ -198,7 +195,7 @@ def Value.mul : Value → Value → Value
   | bool  bL, bool  bR => bool  $ bL && bR
   | int   iL, int   iR => int   $ iL *  iR
   | float fL, float fR => float $ fL *  fR
-  | curry .., curry .. => error "can't multiply programs"
+  | curry .., curry .. => error "can't multiply functions"
   | l,        r        =>
     error s!"invalid application of '*' between\n{l}\nand\n{r}"
 

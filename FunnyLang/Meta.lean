@@ -6,7 +6,39 @@
 
 import Lean
 import FunnyLang.AST
-import FunnyLang.Syntax
+-- import FunnyLang.Syntax
+
+declare_syntax_cat                            value
+syntax ("-" noWs)? num                      : value
+syntax str                                  : value
+syntax "true"                               : value
+syntax "false"                              : value
+syntax ("-" noWs)? num noWs "." (noWs num)? : value
+syntax " [ " value* " ] "                   : value
+syntax "nil"                                : value
+
+declare_syntax_cat                    expression
+syntax value                        : expression
+syntax expression " + " expression  : expression
+syntax expression " * " expression  : expression
+syntax " ! " expression             : expression
+syntax expression " = " expression  : expression
+syntax expression " != " expression : expression
+syntax expression " < " expression  : expression
+syntax expression " <= " expression : expression
+syntax expression " > " expression  : expression
+syntax expression " >= " expression : expression
+syntax ident expression*            : expression
+syntax " ( " expression " ) "       : expression
+
+declare_syntax_cat                                     program
+syntax "skip"                                        : program
+syntax:25 program " ; " program                      : program
+syntax ident+ " := " program:75                      : program
+syntax expression                                    : program
+syntax "if" expression "then" program "else" program : program
+syntax "while" expression "do" program               : program
+syntax " ( " program " ) "                           : program
 
 open Lean Elab Meta
 
@@ -15,7 +47,7 @@ def mkApp' (name : Name) (e : Expr) : Expr :=
 
 def elabValue : Syntax → TermElabM Expr
   | `(value|$n:numLit) =>
-    mkAppM ``Value.int #[mkApp' `Int.ofNat (mkNatLit n.toNat)]
+    mkAppM ``Value.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
   | _ => throwUnsupportedSyntax
 
 def elabStringOfIdent (id : Syntax) : Expr :=
@@ -27,10 +59,12 @@ partial def elabExpression : Syntax → TermElabM Expr
     mkAppM ``Expression.not #[← elabExpression e]
   | `(expression| $n:ident $[$es:expression]*) => do
     let es ← es.data.mapM elabExpression
-    if h : ¬ es.isEmpty then
-      let l ← mkListLit (mkConst ``Expression) es -- term of type `List Expression`
-      mkAppM ``Expression.app #[elabStringOfIdent n, l]
-    else mkAppM ``Expression.var #[elabStringOfIdent n]
+    match es with
+    | []      => mkAppM ``Expression.var #[elabStringOfIdent n]
+    | e :: es =>
+      let l  ← mkListLit (Lean.mkConst ``Expression) es
+      let nl ← mkAppM ``List.toNEList #[e, l]
+      mkAppM ``Expression.app #[elabStringOfIdent n, nl]
   | `(expression| $l:expression + $r:expression) => do
     mkAppM ``Expression.add #[← elabExpression l, ← elabExpression r]
   | `(expression| $l:expression * $r:expression) => do
@@ -55,16 +89,18 @@ partial def elabProgram : Syntax → TermElabM Expr
   | `(program| $p:program; $q:program) => do
     mkAppM ``Program.sequence #[← elabProgram p, ← elabProgram q]
   | `(program| $n:ident $ns:ident* := $p:program) => do
-    let ns := ns.data.map elabStringOfIdent
-    if h : ¬ ns.isEmpty then
-      let l ← mkListLit (mkConst ``String) ns -- term of type `List String`
+    match ns.data.map elabStringOfIdent with
+    | []      =>
+      mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
+    | n' :: ns =>
+      let l  ← mkListLit (Lean.mkConst ``String) ns
+      let nl ← mkAppM ``List.toNEList #[n', l]
       mkAppM ``Program.attribution #[
         elabStringOfIdent n,
         mkApp' ``Program.evaluation $
           mkApp' ``Expression.atom $
-            ← mkAppM ``Value.curry #[l, ← elabProgram p]
+            ← mkAppM ``Value.curry #[nl, ← elabProgram p]
       ]
-      else mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
   | `(program| if $e:expression then $p:program else $q:program) => do
     mkAppM ``Program.ifElse
       #[← elabExpression e, ← elabProgram p, ← elabProgram q]
@@ -77,5 +113,10 @@ partial def elabProgram : Syntax → TermElabM Expr
 
 elab ">>" ppLine p:program ppLine "<<" : term => elabProgram p
 
-#eval >> f x y := 0 <<.run
-#eval >> f 1 1 <<.run
+#eval >>
+f x y := 0
+<<.toString
+
+#eval >>
+f x y := x + y; f3 := f 3; f32 := f3 2
+<<.toString
