@@ -123,7 +123,7 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
     let y ← elabTerm y none
     synthesizeSyntheticMVarsNoPostponing
     unless (← isDefEq x y) do
-      throwError "{← reduce y}\n------------------------\n{← reduce x}"
+      throwError "{← reduce x}\n------------------------\n{← reduce y}"
 
 def p1 := >>
 min x y :=
