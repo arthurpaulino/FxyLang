@@ -14,22 +14,22 @@ syntax str                                  : value
 syntax "true"                               : value
 syntax "false"                              : value
 syntax ("-" noWs)? num noWs "." (noWs num)? : value
-syntax " [ " value* " ] "                   : value
+syntax withPosition("[ " colGt value* " ]") : value
 syntax "nil"                                : value
 
 declare_syntax_cat                    expression
 syntax value                        : expression
-syntax expression " + " expression  : expression
-syntax expression " * " expression  : expression
 syntax " ! " expression             : expression
-syntax expression " = " expression  : expression
+syntax expression " + "  expression : expression
+syntax expression " * "  expression : expression
+syntax expression " = "  expression : expression
 syntax expression " != " expression : expression
-syntax expression " < " expression  : expression
+syntax expression " < "  expression : expression
 syntax expression " <= " expression : expression
-syntax expression " > " expression  : expression
+syntax expression " > "  expression : expression
 syntax expression " >= " expression : expression
 syntax ident expression*            : expression
-syntax " ( " expression " ) "       : expression
+syntax "( " expression " )"         : expression
 
 declare_syntax_cat                                           program
 syntax "skip"                                              : program
