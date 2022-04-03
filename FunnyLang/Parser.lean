@@ -17,9 +17,10 @@ def mkValue : Syntax → Except String Value
 partial def mkExpression : Syntax → Except String Expression
   | `(expression| $v:value)       => return .atom (← mkValue v)
   | `(expression| !$e:expression) => return .not (← mkExpression e)
+  | `(expression| $n:ident)       => return .var n.getId.toString
   | `(expression| $n:ident $[$es:expression]*) => do
     match ← es.data.mapM mkExpression with
-    | []      => return .var n.getId.toString
+    | []      => unreachable!
     | e :: es => return .app n.getId.toString (es.toNEList e)
   | `(expression| $l:expression + $r:expression) =>
     return .add (← mkExpression l) (← mkExpression r)
@@ -119,13 +120,10 @@ def parse (c : String) (env : Environment) : IO (Option String × Program) := do
 -- "
 
 def code := "
-if 1 = 1 then
-  x := 1
-else
-  x := 2
-
-if 1=1 then
-  y := 2
+succ x := x + 1
+app1 f x := f x
+a := 7
+app1 succ a
 "
 
 def cCode := cleanseCode code

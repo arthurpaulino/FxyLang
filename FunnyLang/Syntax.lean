@@ -13,19 +13,20 @@ syntax ("-" noWs)? num noWs "." (noWs num)? : value
 syntax withPosition("[ " colGt value* " ]") : value
 syntax "nil"                                : value
 
-declare_syntax_cat                    expression
-syntax value                        : expression
-syntax " ! " expression             : expression
-syntax expression " + "  expression : expression
-syntax expression " * "  expression : expression
-syntax expression " = "  expression : expression
-syntax expression " != " expression : expression
-syntax expression " < "  expression : expression
-syntax expression " <= " expression : expression
-syntax expression " > "  expression : expression
-syntax expression " >= " expression : expression
-syntax ident (colGt expression)*    : expression
-syntax " ( " expression " ) "       : expression
+declare_syntax_cat                       expression
+syntax value                           : expression
+syntax " ! " expression                : expression
+syntax expression " + "  expression    : expression
+syntax expression " * "  expression    : expression
+syntax expression " = "  expression    : expression
+syntax expression " != " expression    : expression
+syntax expression " < "  expression    : expression
+syntax expression " <= " expression    : expression
+syntax expression " > "  expression    : expression
+syntax expression " >= " expression    : expression
+syntax:51 ident                        : expression
+syntax:49 ident (colGt expression:50)+ : expression
+syntax " ( " expression " ) "          : expression
 
 declare_syntax_cat                      program
 declare_syntax_cat                      programSeq

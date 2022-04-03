@@ -6,42 +6,7 @@
 
 import Lean
 import FunnyLang.AST
--- import FunnyLang.Syntax
-
-declare_syntax_cat                            value
-syntax ("-" noWs)? num                      : value
-syntax str                                  : value
-syntax "true"                               : value
-syntax "false"                              : value
-syntax ("-" noWs)? num noWs "." (noWs num)? : value
-syntax withPosition("[ " colGt value* " ]") : value
-syntax "nil"                                : value
-
-declare_syntax_cat                    expression
-syntax value                        : expression
-syntax " ! " expression             : expression
-syntax expression " + "  expression : expression
-syntax expression " * "  expression : expression
-syntax expression " = "  expression : expression
-syntax expression " != " expression : expression
-syntax expression " < "  expression : expression
-syntax expression " <= " expression : expression
-syntax expression " > "  expression : expression
-syntax expression " >= " expression : expression
-syntax ident (colGt expression)*    : expression
-syntax " ( " expression " ) "       : expression
-
-declare_syntax_cat                      program
-declare_syntax_cat                      programSeq
-syntax withPosition((colGe program)+) : programSeq
-
-syntax "skip"                                                 : program
-syntax withPosition(ident+ " := " colGt programSeq)           : program
-syntax expression                                             : program
-syntax "if" expression "then" colGt programSeq
-  ("else" colGt programSeq)?                                  : program
-syntax withPosition("while" expression "do" colGt programSeq) : program
-syntax " ( " programSeq " ) "                                 : program
+import FunnyLang.Syntax
 
 open Lean Elab Meta
 
@@ -60,10 +25,10 @@ partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| $v:value) => do mkAppM ``Expression.atom #[← elabValue v]
   | `(expression| ! $e:expression) => do
     mkAppM ``Expression.not #[← elabExpression e]
+  | `(expression| $n:ident) => mkAppM ``Expression.var #[elabStringOfIdent n]
   | `(expression| $n:ident $[$es:expression]*) => do
-    dbg_trace es.size
     match ← es.data.mapM elabExpression with
-    | []      => mkAppM ``Expression.var #[elabStringOfIdent n]
+    | []      => unreachable!
     | e :: es =>
       let l  ← mkListLit (Lean.mkConst ``Expression) es
       let nl ← mkAppM ``List.toNEList #[e, l]
@@ -130,13 +95,12 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
     unless (← isDefEq x y) do
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
 
-#eval >> -- 2      ok!
-f 3 3
-<<
-
-#eval >> -- 1 and then 1          not ok!
-f a 3
-<<
+#eval >>
+succ x := x + 1
+app1 f x := f x
+a := 7
+app1 succ a
+<<.run
 
 def px := >>
 ((x := 1)
