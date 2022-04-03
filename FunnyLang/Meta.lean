@@ -29,17 +29,16 @@ syntax expression " <= " expression : expression
 syntax expression " > "  expression : expression
 syntax expression " >= " expression : expression
 syntax ident expression*            : expression
-syntax "( " expression " )"         : expression
+syntax " ( " expression " ) "         : expression
 
-declare_syntax_cat                                           program
-syntax "skip"                                              : program
-syntax:25 program program                                  : program
-syntax withPosition(ident+ " := " colGt program:75)        : program
-syntax expression                                          : program
-syntax withPosition("if" expression (colGt "then"
-  program) "else" (colGt program))                         : program
-syntax withPosition("while" expression "do" colGt program) : program
-syntax " ( " program " ) "                                 : program
+declare_syntax_cat program
+syntax programSeq := withPosition((colGe program)+)
+syntax "skip"                                                          : program
+syntax withPosition(ident+ " := " colGt programSeq)                    : program
+syntax expression                                                      : program
+syntax "if" expression "then" colGt programSeq "else" colGt programSeq : program
+syntax withPosition("while" expression "do" colGt programSeq)          : program
+syntax " ( " programSeq " ) "                                          : program
 
 open Lean Elab Meta
 
@@ -59,8 +58,7 @@ partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| ! $e:expression) => do
     mkAppM ``Expression.not #[← elabExpression e]
   | `(expression| $n:ident $[$es:expression]*) => do
-    let es ← es.data.mapM elabExpression
-    match es with
+    match ← es.data.mapM elabExpression with
     | []      => mkAppM ``Expression.var #[elabStringOfIdent n]
     | e :: es =>
       let l  ← mkListLit (Lean.mkConst ``Expression) es
@@ -86,13 +84,13 @@ partial def elabExpression : Syntax → TermElabM Expr
   | _ => throwUnsupportedSyntax
 
 partial def elabProgram : Syntax → TermElabM Expr
+  | `(programSeq| $p:program $[$ps:program]*) => do
+    ps.foldlM (init := ← elabProgram p) fun a b => do
+      mkAppM ``Program.sequence #[a, ← elabProgram b]
   | `(program| skip) => return mkConst ``Program.skip
-  | `(program| $p:program $q:program) => do
-    mkAppM ``Program.sequence #[← elabProgram p, ← elabProgram q]
-  | `(program| $n:ident $ns:ident* := $p:program) => do
+  | `(program| $n:ident $ns:ident* := $p:programSeq) => do
     match ns.data.map elabStringOfIdent with
-    | []      =>
-      mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
+    | [] => mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
     | n' :: ns =>
       let l  ← mkListLit (Lean.mkConst ``String) ns
       let nl ← mkAppM ``List.toNEList #[n', l]
@@ -102,19 +100,19 @@ partial def elabProgram : Syntax → TermElabM Expr
           mkApp' ``Expression.atom $
             ← mkAppM ``Value.curry #[nl, ← elabProgram p]
       ]
-  | `(program| if $e:expression then $p:program else $q:program) => do
+  | `(program| if $e:expression then $p:programSeq else $q:programSeq) => do
     mkAppM ``Program.ifElse
       #[← elabExpression e, ← elabProgram p, ← elabProgram q]
-  | `(program| while $e:expression do $p:program) => do
+  | `(program| while $e:expression do $p:programSeq) => do
     mkAppM ``Program.whileLoop #[← elabExpression e, ← elabProgram p]
   | `(program| $e:expression) => do
     mkAppM ``Program.evaluation #[← elabExpression e]
-  | `(program| ($p:program)) => elabProgram p
+  | `(program| ($p:programSeq)) => elabProgram p
   | _ => throwUnsupportedSyntax
 
 ------- ↓↓ testing area ↓↓
 
-elab ">>" ppLine p:program ppLine "<<" : term => elabProgram p
+elab ">>" ppLine p:programSeq ppLine "<<" : term => elabProgram p
 
 open Lean.Elab.Command Lean.Elab.Term in
 elab "#assert " x:term:60 " = " y:term:60 : command =>
@@ -124,6 +122,54 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
     synthesizeSyntheticMVarsNoPostponing
     unless (← isDefEq x y) do
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
+
+def px := >>
+((x := 1)
+ (a := 2))
+<<.toString
+
+def px' := >>
+x := 1
+a := 2
+<<.toString
+
+def px'' := >>
+(x := 1)
+a := 2
+<<.toString
+
+#assert px = px'
+#assert px' = px''
+
+def pw := >>
+x := 1
+s := 0
+a := 0
+while a < 5 do
+  a := a + 1
+  s := s + a
+  x := 1
+s
+<<
+
+def pw' := >>
+x := 1
+s := 0
+a := 0
+while a < 5 do
+  ((a := a + 1
+    s := s + a)
+    x := 1)
+s
+<<
+
+#assert pw = pw'
+
+#eval >>
+((f x y := x + y)
+ f3 := f 3)
+f32 := f3 2
+<<.run
 
 def p1 := >>
 min x y :=
@@ -169,13 +215,17 @@ def p6 := >>
 f32 := f3 2
 <<.toString
 
+def p6' := >>
+((f x y := x + y)
+ f3 := f 3)
+f32 := f3 2
+<<.toString
+
 def p7 := >>
 (f x y := x + y)
 (f3 := f 3)
 f32 := f3 2
 <<.toString
-
-#assert p6 = p7
 
 def p8 := >>
 f x y := x + y
@@ -183,6 +233,8 @@ f3 := f 3
 f32 := f3 2
 <<.toString
 
+#assert p6 = p6'
+#assert p6 = p7
 #assert p7 = p8
 
 
@@ -203,14 +255,14 @@ def p9' := >>
 def p10 := >>
 a :=
   (x := 5
-  y = 5)
+   y = 5)
 2 + 5
 <<.toString
 
 def p11 := >>
 (a :=
   ((x := 5)
-  y = 5))
+   y = 5))
 2 + 5
 <<.toString
 
