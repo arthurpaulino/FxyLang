@@ -179,6 +179,30 @@ min x y :=
 min 5 3
 <<.toString
 
+def p1' := >>
+min x y :=
+  if x < y then x
+  else y
+min 5 3
+<<.toString
+
+def p1'' := >>
+min x y :=
+  if x < y
+  then x
+  else y
+min 5 3
+<<.toString
+
+def p1''' := >>
+min x y :=
+  if x < y then
+    x
+  else
+    y
+min 5 3
+<<.toString
+
 def p2 := >>
 (min x y :=
   if x < y
@@ -187,6 +211,9 @@ def p2 := >>
 min 5 3
 <<.toString
 
+#assert p1 = p1'
+#assert p1 = p1''
+#assert p1 = p1'''
 #assert p1 = p2
 
 def p3 := >>
