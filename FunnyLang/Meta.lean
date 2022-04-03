@@ -28,7 +28,7 @@ syntax expression " < "  expression : expression
 syntax expression " <= " expression : expression
 syntax expression " > "  expression : expression
 syntax expression " >= " expression : expression
-syntax ident (colGt expression)*     : expression
+syntax ident (colGt expression)*    : expression
 syntax " ( " expression " ) "       : expression
 
 declare_syntax_cat                      program
