@@ -309,11 +309,9 @@ mutual
     | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
     | app  n  es => match ctx[n] with
       | none              => error s!"'{n}' not found"
-      | some (curry ns p) =>
-        let (ns?, p') := consume p ns es
-        match ns? with
-        | none    => (p'.run ctx).2 -- actually executing the function program
-        | some ns => curry ns p' -- there are still arguments to be fulfille
+      | some (curry ns p) => match consume p ns es with
+        | (none, p) => (p.run ctx).2 -- actually executing the function program
+        | (some ns, p) => curry ns p -- there are still arguments to be provided
       | _                 => error s!"'{n}' is not a function"
     | .eq eL eR  => (evaluate ctx eL).eq $ evaluate ctx eR
     | .ne eL eR  => (evaluate ctx eL).ne $ evaluate ctx eR

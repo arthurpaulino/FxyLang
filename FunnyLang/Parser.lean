@@ -18,9 +18,8 @@ partial def mkExpression : Syntax → Except String Expression
   | `(expression| $v:value)       => return .atom (← mkValue v)
   | `(expression| !$e:expression) => return .not (← mkExpression e)
   | `(expression| $n:ident $[$es:expression]*) => do
-    let es ← es.data.mapM mkExpression
-    match es with
-    | [] => return .var n.getId.toString
+    match ← es.data.mapM mkExpression with
+    | []      => return .var n.getId.toString
     | e :: es => return .app n.getId.toString (es.toNEList e)
   | `(expression| $l:expression + $r:expression) =>
     return .add (← mkExpression l) (← mkExpression r)
@@ -42,29 +41,31 @@ partial def mkExpression : Syntax → Except String Expression
   | _ => throw "error: can't parse expression"
 
 partial def mkProgram : Syntax → Except String Program
-  | `(program| skip) =>
-    return Program.skip
-  | `(program| $p:program; $q:program) =>
-    return .sequence (← mkProgram p) (← mkProgram q)
-  | `(program| $n:ident $ns:ident* := $p:program) =>
+  | `(programSeq| $p:program $[$ps:program]*) => do
+    ps.foldlM (init := ← mkProgram p) fun a b => do
+      return .sequence a (← mkProgram b)
+  | `(program| skip) => return Program.skip
+  | `(program| $n:ident $ns:ident* := $p:programSeq) =>
     match ns.data.map $ fun i => i.getId.toString with
-    | [] => return .attribution n.getId.toString (← mkProgram p)
+    | []       => return .attribution n.getId.toString (← mkProgram p)
     | n' :: ns =>
       return .attribution n.getId.toString $
         .evaluation $ .atom $
           .curry (ns.toNEList n') (← mkProgram p)
-  | `(program| if $e:expression then $p:program else $q:program) =>
-    return .ifElse (← mkExpression e)
-      (← mkProgram p) (← mkProgram q)
-  | `(program| while $e:expression do $p:program) =>
+  | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
+    let q ← match q with
+    | none   => pure $ Program.skip
+    | some q => mkProgram q
+    return .ifElse (← mkExpression e) (← mkProgram p) q
+  | `(program| while $e:expression do $p:programSeq) =>
     return .whileLoop (← mkExpression e) (← mkProgram p)
   | `(program| $e:expression) =>
     return .evaluation (← mkExpression e)
-  | `(program| ($p:program)) => mkProgram p
+  | `(program| ($p:programSeq)) => mkProgram p
   | _ => throw "error: can't parse program"
 
 partial def parseProgram : Environment → String → Except String Program
-  | env, s => do mkProgram (← Parser.runParserCategory env `program s)
+  | env, s => do mkProgram (← Parser.runParserCategory env `programSeq s)
 
 def joinedOn (on : String) : List String → String
   | []            => ""
@@ -78,7 +79,7 @@ def replaceTabs (s : String) : String :=
   s.replace "\t" " "
 
 def cleanseLine (l : String) : String :=
-  replaceTabs $ removeComments l |>.trimRight
+  (replaceTabs $ removeComments l).trimRight
 
 def cleanseCode (c : String) : String :=
   joinedOn "\n" $
@@ -92,12 +93,45 @@ def metaParse (c : String) : MetaM (Option String × Program) := do
 def parse (c : String) (env : Environment) : IO (Option String × Program) := do
   Prod.fst <$> (metaParse c).run'.toIO {} {env}
 
--- def code := "s := 0; a := 0; (while a < 5 do a := a + 1; s := s + a); s"
-def code := "f x y := x + y; f3 := f 3; f32 := f3 2"
--- def code := "a := 1 + 1; a = 2"
+-- def code := "
+-- ((x := 1)
+--  (a := 2))
+-- "
 
+-- def code := "
+-- x := 1
+-- a := 2
+-- "
+
+-- def code := "
+-- s := 0
+-- a := 0
+-- while a < 5 do
+--   a := a + 1
+--   s := s + a
+-- s
+-- "
+
+-- def code := "
+-- f x y := x + y
+-- f3 := f 3
+-- f32 := f3 2
+-- "
+
+def code := "
+if 1 = 1 then
+  x := 1
+else
+  x := 2
+
+if 1=1 then
+  y := 2
+"
+
+def cCode := cleanseCode code
+#eval cCode
 #eval show MetaM _ from do
-  let p := parseProgram (← getEnv) (cleanseCode code)
+  let p := parseProgram (← getEnv) cCode
   match p with
     | Except.ok p =>
       let (c, r) := p.run

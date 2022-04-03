@@ -10,28 +10,31 @@ syntax str                                  : value
 syntax "true"                               : value
 syntax "false"                              : value
 syntax ("-" noWs)? num noWs "." (noWs num)? : value
-syntax " [ " value* " ] "                   : value
+syntax withPosition("[ " colGt value* " ]") : value
 syntax "nil"                                : value
 
 declare_syntax_cat                    expression
 syntax value                        : expression
-syntax expression " + " expression  : expression
-syntax expression " * " expression  : expression
 syntax " ! " expression             : expression
-syntax expression " = " expression  : expression
+syntax expression " + "  expression : expression
+syntax expression " * "  expression : expression
+syntax expression " = "  expression : expression
 syntax expression " != " expression : expression
-syntax expression " < " expression  : expression
+syntax expression " < "  expression : expression
 syntax expression " <= " expression : expression
-syntax expression " > " expression  : expression
+syntax expression " > "  expression : expression
 syntax expression " >= " expression : expression
-syntax ident expression*            : expression
+syntax ident (colGt expression)*    : expression
 syntax " ( " expression " ) "       : expression
 
-declare_syntax_cat                                     program
-syntax "skip"                                        : program
-syntax:25 program " ; " program                      : program
-syntax ident+ " := " program:75                      : program
-syntax expression                                    : program
-syntax "if" expression "then" program "else" program : program
-syntax "while" expression "do" program               : program
-syntax " ( " program " ) "                           : program
+declare_syntax_cat                      program
+declare_syntax_cat                      programSeq
+syntax withPosition((colGe program)+) : programSeq
+
+syntax "skip"                                                 : program
+syntax withPosition(ident+ " := " colGt programSeq)           : program
+syntax expression                                             : program
+syntax "if" expression "then" colGt programSeq
+  ("else" colGt programSeq)?                                  : program
+syntax withPosition("while" expression "do" colGt programSeq) : program
+syntax " ( " programSeq " ) "                                 : program
