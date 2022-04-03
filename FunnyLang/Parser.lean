@@ -52,8 +52,11 @@ partial def mkProgram : Syntax → Except String Program
       return .attribution n.getId.toString $
         .evaluation $ .atom $
           .curry (ns.toNEList n') (← mkProgram p)
-  | `(program| if $e:expression then $p:programSeq else $q:programSeq) =>
-    return .ifElse (← mkExpression e) (← mkProgram p) (← mkProgram q)
+  | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
+    let q ← match q with
+    | none   => pure $ Program.skip
+    | some q => mkProgram q
+    return .ifElse (← mkExpression e) (← mkProgram p) q
   | `(program| while $e:expression do $p:programSeq) =>
     return .whileLoop (← mkExpression e) (← mkProgram p)
   | `(program| $e:expression) =>
@@ -62,7 +65,7 @@ partial def mkProgram : Syntax → Except String Program
   | _ => throw "error: can't parse program"
 
 partial def parseProgram : Environment → String → Except String Program
-  | env, s => do mkProgram (← Parser.runParserCategory env `program s)
+  | env, s => do mkProgram (← Parser.runParserCategory env `programSeq s)
 
 def joinedOn (on : String) : List String → String
   | []            => ""
@@ -95,10 +98,10 @@ def parse (c : String) (env : Environment) : IO (Option String × Program) := do
 --  (a := 2))
 -- "
 
-def code := "
-x := 1
-a := 2
-"
+-- def code := "
+-- x := 1
+-- a := 2
+-- "
 
 -- def code := "
 -- s := 0
@@ -115,10 +118,15 @@ a := 2
 -- f32 := f3 2
 -- "
 
--- def code := "
--- a := 1 + 1
--- a = 2
--- "
+def code := "
+if 1 = 1 then
+  x := 1
+else
+  x := 2
+
+if 1=1 then
+  y := 2
+"
 
 def cCode := cleanseCode code
 #eval cCode

@@ -24,14 +24,17 @@ syntax expression " < "  expression : expression
 syntax expression " <= " expression : expression
 syntax expression " > "  expression : expression
 syntax expression " >= " expression : expression
-syntax ident expression*            : expression
+syntax ident (colGt expression)*    : expression
 syntax " ( " expression " ) "       : expression
 
-declare_syntax_cat program
-syntax programSeq := withPosition((colGe program)+)
-syntax "skip"                                                          : program
-syntax withPosition(ident+ " := " colGt programSeq)                    : program
-syntax expression                                                      : program
-syntax "if" expression "then" colGt programSeq "else" colGt programSeq : program
-syntax withPosition("while" expression "do" colGt programSeq)          : program
-syntax " ( " programSeq " ) "                                          : program
+declare_syntax_cat                      program
+declare_syntax_cat                      programSeq
+syntax withPosition((colGe program)+) : programSeq
+
+syntax "skip"                                                 : program
+syntax withPosition(ident+ " := " colGt programSeq)           : program
+syntax expression                                             : program
+syntax "if" expression "then" colGt programSeq
+  ("else" colGt programSeq)?                                  : program
+syntax withPosition("while" expression "do" colGt programSeq) : program
+syntax " ( " programSeq " ) "                                 : program

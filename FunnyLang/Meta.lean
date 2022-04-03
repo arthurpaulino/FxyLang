@@ -6,39 +6,7 @@
 
 import Lean
 import FunnyLang.AST
--- import FunnyLang.Syntax
-
-declare_syntax_cat                            value
-syntax ("-" noWs)? num                      : value
-syntax str                                  : value
-syntax "true"                               : value
-syntax "false"                              : value
-syntax ("-" noWs)? num noWs "." (noWs num)? : value
-syntax withPosition("[ " colGt value* " ]") : value
-syntax "nil"                                : value
-
-declare_syntax_cat                    expression
-syntax value                        : expression
-syntax " ! " expression             : expression
-syntax expression " + "  expression : expression
-syntax expression " * "  expression : expression
-syntax expression " = "  expression : expression
-syntax expression " != " expression : expression
-syntax expression " < "  expression : expression
-syntax expression " <= " expression : expression
-syntax expression " > "  expression : expression
-syntax expression " >= " expression : expression
-syntax ident expression*            : expression
-syntax " ( " expression " ) "         : expression
-
-declare_syntax_cat program
-syntax programSeq := withPosition((colGe program)+)
-syntax "skip"                                                          : program
-syntax withPosition(ident+ " := " colGt programSeq)                    : program
-syntax expression                                                      : program
-syntax "if" expression "then" colGt programSeq "else" colGt programSeq : program
-syntax withPosition("while" expression "do" colGt programSeq)          : program
-syntax " ( " programSeq " ) "                                          : program
+import FunnyLang.Syntax
 
 open Lean Elab Meta
 
@@ -100,9 +68,12 @@ partial def elabProgram : Syntax → TermElabM Expr
           mkApp' ``Expression.atom $
             ← mkAppM ``Value.curry #[nl, ← elabProgram p]
       ]
-  | `(program| if $e:expression then $p:programSeq else $q:programSeq) => do
+  | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
+    let q ← match q with
+    | none => pure $ mkConst ``Program.skip
+    | some q => elabProgram q
     mkAppM ``Program.ifElse
-      #[← elabExpression e, ← elabProgram p, ← elabProgram q]
+      #[← elabExpression e, ← elabProgram p, q]
   | `(program| while $e:expression do $p:programSeq) => do
     mkAppM ``Program.whileLoop #[← elabExpression e, ← elabProgram p]
   | `(program| $e:expression) => do
@@ -165,12 +136,6 @@ s
 
 #assert pw = pw'
 
-#eval >>
-((f x y := x + y)
- f3 := f 3)
-f32 := f3 2
-<<.run
-
 def p1 := >>
 min x y :=
   if x < y
@@ -215,6 +180,19 @@ min 5 3
 #assert p1 = p1''
 #assert p1 = p1'''
 #assert p1 = p2
+
+def pIf := >>
+if a = 5 then
+  b := 3
+<<
+
+def pIf' := >>
+if a = 5 then
+  b := 3
+else skip
+<<
+
+#assert pIf = pIf'
 
 def p3 := >>
 while 1 < a do
@@ -263,7 +241,6 @@ f32 := f3 2
 #assert p6 = p6'
 #assert p6 = p7
 #assert p7 = p8
-
 
 def p9 := >>
 a :=
