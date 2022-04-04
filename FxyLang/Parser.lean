@@ -42,10 +42,11 @@ partial def mkExpression : Syntax → Except String Expression
   | _ => throw "error: can't parse expression"
 
 partial def mkProgram : Syntax → Except String Program
+  | `(program| skip)  => return Program.skip
+  | `(program| break) => return Program.halt Halting.brk
   | `(programSeq| $p:program $[$ps:program]*) => do
     ps.foldlM (init := ← mkProgram p) fun a b => do
       return .sequence a (← mkProgram b)
-  | `(program| skip) => return Program.skip
   | `(program| $n:ident $ns:ident* := $p:programSeq) =>
     match ns.data.map $ fun i => i.getId.toString with
     | []       => return .attribution n.getId.toString (← mkProgram p)
@@ -132,7 +133,7 @@ def cCode := cleanseCode code
   let p := parseProgram (← getEnv) cCode
   match p with
     | Except.ok p =>
-      let (c, r) := p.run
+      let (c, r) := p.run!
       IO.println r
       IO.println "------context-------"
       IO.println c

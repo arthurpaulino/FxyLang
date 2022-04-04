@@ -52,6 +52,10 @@ def List.unfoldStrings (l : List String) : String :=
 
 mutual
 
+  inductive Halting
+    | err : String  → Halting
+    | brk : Halting
+
   inductive Value
     | nil   : Value
     | bool  : Bool          → Value
@@ -60,7 +64,7 @@ mutual
     | list  : Array Value   → Value
     | str   : String        → Value
     | curry : NEList String → Program → Value
-    | error : String        → Value
+    | haltV : Halting       → Value
     deriving Inhabited, Repr
 
   inductive Expression
@@ -76,7 +80,7 @@ mutual
     | le   : Expression → Expression        → Expression
     | gt   : Expression → Expression        → Expression
     | ge   : Expression → Expression        → Expression
-    deriving Inhabited, Repr
+    deriving Repr
 
   inductive Program
     | skip        : Program
@@ -85,12 +89,12 @@ mutual
     | ifElse      : Expression → Program → Program → Program
     | whileLoop   : Expression → Program → Program
     | evaluation  : Expression → Program
-    | fail        : String     → Program
+    | halt        : Halting    → Program
     deriving Inhabited, Repr
 
 end
 
-open Value Expression Program
+open Halting Value Expression Program
 
 def Program.getCurryNames? : Program → Option (NEList String)
   | evaluation (atom (curry ns _))                              => some ns
@@ -110,6 +114,10 @@ def blank (n : Nat) : String :=
 
 mutual
 
+  partial def haltToString : Halting → String
+    | err s => s!"error: {s}"
+    | brk   => unreachable!
+
   partial def valToString : Value → String
     | nil       => "nil"
     | .bool b   => toString b
@@ -118,7 +126,7 @@ mutual
     | list  l   => toString $ l.map fun v => valToString v
     | str   s   => s
     | curry _ p => progToString p
-    | error s   => s!"error: {s}"
+    | haltV h   => haltToString h
 
   partial def unfoldExpressions (es : NEList Expression) : String :=
     (es.toList.map fun e => expToString e).unfoldStrings
@@ -154,7 +162,7 @@ mutual
     | ifElse      e p q =>
       s!"{blank l}if {expToString e} then\n{progToStringAux (l+2) p}\n" ++
         s!"else\n{progToStringAux (l+2) q}"
-    | fail        s     => s
+    | .halt       h     => haltToString h
 
   partial def progToString (p : Program) : String :=
     progToStringAux 0 p
@@ -170,82 +178,82 @@ instance : ToString Expression := ⟨toString⟩
 instance : ToString Program    := ⟨toString⟩
 
 def Program.lengthAux (n : Nat) : Program → Nat
-  | Program.sequence _ p => p.lengthAux (n + 1)
-  | _                    => n + 1
+  | sequence _ p => p.lengthAux (n + 1)
+  | _            => n + 1
 
 def Program.length (p : Program) : Nat :=
   p.lengthAux 0
 
 def Value.add : Value → Value → Value
-  | error s,  _        => error s
-  | _,        error s  => error s
+  | haltV h,  _        => haltV h
+  | _,        haltV h  => haltV h
   | bool  bL, bool  bR => bool  $ bL || bR
   | str   sL, str   sR => str   $ sL ++ sR
   | int   iL, int   iR => int   $ iL +  iR
   | float fL, float fR => float $ fL +  fR
   | list  lL, list  lR => list  $ lL ++ lR
   | list  lL, vR       => list  $ lL.push vR
-  | curry .., curry .. => error "can't sum functions"
+  | curry .., curry .. => haltV $ .err "can't sum functions"
   | l,        r        =>
-    error s!"invalid application of '+' between\n{l}\nand\n{r}"
+    haltV $ .err s!"invalid application of '+' between\n{l}\nand\n{r}"
 
 def Value.mul : Value → Value → Value
-  | error s,  _        => error s
-  | _,        error s  => error s
+  | haltV h,  _        => haltV h
+  | _,        haltV h  => haltV h
   | bool  bL, bool  bR => bool  $ bL && bR
   | int   iL, int   iR => int   $ iL *  iR
   | float fL, float fR => float $ fL *  fR
-  | curry .., curry .. => error "can't multiply functions"
+  | curry .., curry .. => haltV $ .err "can't multiply functions"
   | l,        r        =>
-    error s!"invalid application of '*' between\n{l}\nand\n{r}"
+    haltV $ .err s!"invalid application of '*' between\n{l}\nand\n{r}"
 
 def Value.lt : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
+  | haltV h,   _         => haltV h
+  | _,         haltV h   => haltV h
   | str   sL,  str   sR  => bool $ sL < sR
   | int   iL,  int   iR  => bool $ iL < iR
   | float fL,  float fR  => bool $ fL < fR
   | list  lL,  list  lR  => bool $ lL.size < lR.size
   | curry _ p, curry _ q => bool $ p.length < q.length
   | l,         r         =>
-    error s!"invalid application of '<' between\n{l}\nand\n{r}"
+    haltV $ .err s!"invalid application of '<' between\n{l}\nand\n{r}"
 
 def Value.le : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
+  | haltV h,   _         => haltV h
+  | _,         haltV h   => haltV h
   | str   sL,  str   sR  => bool $ sL < sR || sL == sR
   | int   iL,  int   iR  => bool $ iL ≤ iR
   | float fL,  float fR  => bool $ fL ≤ fR
   | list  lL,  list  lR  => bool $ lL.size ≤ lR.size
   | curry _ p, curry _ q => bool $ p.length ≤ q.length
   | l,         r         =>
-    error s!"invalid application of '<=' between\n{l}\nand\n{r}"
+    haltV $ .err s!"invalid application of '<=' between\n{l}\nand\n{r}"
 
 def Value.gt : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
+  | haltV h,   _         => haltV h
+  | _,         haltV h   => haltV h
   | str   sL,  str   sR  => bool $ sL > sR
   | int   iL,  int   iR  => bool $ iL > iR
   | float fL,  float fR  => bool $ fL > fR
   | list  lL,  list  lR  => bool $ lL.size > lR.size
   | curry _ p, curry _ q => bool $ p.length > q.length
   | l,         r         =>
-    error s!"invalid application of '>' between\n{l}\nand\n{r}"
+    haltV $ .err s!"invalid application of '>' between\n{l}\nand\n{r}"
 
 def Value.ge : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
+  | haltV h,   _         => haltV h
+  | _,         haltV h   => haltV h
   | str   sL,  str   sR  => bool $ sL > sR || sL == sR
   | int   iL,  int   iR  => bool $ iL ≥ iR
   | float fL,  float fR  => bool $ fL ≥ fR
   | list  lL,  list  lR  => bool $ lL.size ≥ lR.size
   | curry _ p, curry _ q => bool $ p.length ≥ q.length
   | l,         r         =>
-    error s!"invalid application of '<=' between\n{l}\nand\n{r}"
+    haltV $ .err s!"invalid application of '<=' between\n{l}\nand\n{r}"
 
 partial def Value.eq : Value → Value → Value
-  | error s,   _       => error s
-  | _,         error s => error s
+  | haltV h,  _        => haltV h
+  | _,        haltV h  => haltV h
   | nil,      nil      => bool true
   | bool  bL, bool  bR => bool $ bL =  bR
   | str   sL, str   sR => bool $ sL =  sR
@@ -256,12 +264,12 @@ partial def Value.eq : Value → Value → Value
       lL.zip lR |>.foldl (init := true) $ fun acc (l, r) =>
         acc && match l.eq r with | bool true => true | _ => false
     else false
-  | curry .., curry .. => error "can't compare functions"
+  | curry .., curry .. => haltV $ .err "can't compare functions"
   | _,        _        => bool false
 
 partial def Value.ne : Value → Value → Value
-  | error s,   _       => error s
-  | _,         error s => error s
+  | haltV h,  _        => haltV h
+  | _,        haltV h  => haltV h
   | nil,      nil      => bool false
   | bool  bL, bool  bR => bool $ bL ≠ bR
   | str   sL, str   sR => bool $ sL ≠ sR
@@ -272,11 +280,8 @@ partial def Value.ne : Value → Value → Value
       lL.zip lR |>.foldl (init := false) $ fun acc (l, r) =>
         acc || match l.ne r with | bool true => true | _ => false
     else true
-  | curry .., curry .. => error "can't compare functions"
+  | curry .., curry .. => haltV $ .err "can't compare functions"
   | _,        _        => bool true
-
-def cantEvalAsBool (v : Value) : String :=
-  s!"can't evaluate as bool:\n{v}"
 
 open NEList in
 def consume (p : Program) :
@@ -285,7 +290,8 @@ def consume (p : Program) :
     consume (sequence (attribution n (evaluation e)) p) ns es
   | cons n ns, uno  e    => (some ns, sequence (attribution n (evaluation e)) p)
   | uno  n,    uno  e    => (none, sequence (attribution n (evaluation e)) p)
-  | uno  _,    cons _ _  => (none, fail "incompatible number of parameters")
+  | uno  _,    cons _ _  =>
+    (none, halt $ .err "incompatible number of parameters")
 
 abbrev Context := Std.HashMap String Value
 
@@ -295,103 +301,147 @@ protected def Context.toString (c : Context) : String :=
 
 instance : ToString Context := ⟨Context.toString⟩
 
+structure State where
+  ctx     : Context
+  inWhile : Bool
+  deriving Inhabited
+
+def State.new : State :=
+  ⟨default, false⟩
+
+def State.getOp (self : State) (idx : String) : Option Value :=
+  self.ctx[idx]
+
+def State.with (self : State) (idx : String) (value : Value) : State :=
+  ⟨self.ctx.insert idx value, self.inWhile⟩
+
+def State.toWhile (self : State) (isWhile : Bool := true) : State :=
+  { self with inWhile := isWhile }
+
+def cantEvalAsBool (v : Value) : String :=
+  s!"can't evaluate as bool:\n{v}"
+
+def cantUseBreak : String := "can't use break outside of a `while` loop"
+
 mutual
 
-  partial def evaluate (ctx : Context) : Expression → Value
+  partial def evaluate (stt : State) : Expression → Value
     | atom v     => v
-    | var  n     => match ctx[n] with
-      | none   => error s!"'{n}' not found"
+    | var  n     => match stt[n] with
+      | none   => haltV $ .err s!"'{n}' not found"
       | some v => v
-    | .not e => match evaluate ctx e with
+    | .not e     => match evaluate stt e with
       | .bool b => bool !b
-      | v       => error $ cantEvalAsBool v
-    | app  n  es => match ctx[n] with
-      | none              => error s!"'{n}' not found"
+      | v       => haltV $ .err $ cantEvalAsBool v
+    | app  n es  => match stt[n] with
+      | none              => haltV $ .err s!"'{n}' not found"
       | some (curry ns p) => match consume p ns es with
-        | (none,    p) => (p.run ctx).2
+        | (none,    p) => (p.run stt).2
         | (some ns, p) => curry ns p
-      | _                 => error s!"'{n}' is not a function"
-    | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
-    | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
-    | .eq  eL eR => (evaluate ctx eL).eq  $ evaluate ctx eR
-    | .ne  eL eR => (evaluate ctx eL).ne  $ evaluate ctx eR
-    | .lt  eL eR => (evaluate ctx eL).lt  $ evaluate ctx eR
-    | .le  eL eR => (evaluate ctx eL).le  $ evaluate ctx eR
-    | .gt  eL eR => (evaluate ctx eL).gt  $ evaluate ctx eR
-    | .ge  eL eR => (evaluate ctx eL).ge  $ evaluate ctx eR
+      | _        => haltV $ .err s!"'{n}' is not a function"
+    | .add eL eR => (evaluate stt eL).add $ evaluate stt eR
+    | .mul eL eR => (evaluate stt eL).mul $ evaluate stt eR
+    | .eq  eL eR => (evaluate stt eL).eq  $ evaluate stt eR
+    | .ne  eL eR => (evaluate stt eL).ne  $ evaluate stt eR
+    | .lt  eL eR => (evaluate stt eL).lt  $ evaluate stt eR
+    | .le  eL eR => (evaluate stt eL).le  $ evaluate stt eR
+    | .gt  eL eR => (evaluate stt eL).gt  $ evaluate stt eR
+    | .ge  eL eR => (evaluate stt eL).ge  $ evaluate stt eR
 
-  partial def Program.run (ctx : Context := default) : Program → Context × Value
-    | skip           => (ctx, nil)
+  partial def Program.run (stt : State) : Program → State × Value
+    | skip           => (stt, nil)
     | sequence p₁ p₂ =>
-      let res := p₁.run ctx
+      let res := p₁.run stt
       match res.2 with
-      | error _ => res
+      | haltV _ => res
       | _       => p₂.run res.1
-    | attribution name p =>
-      let res := p.run ctx
-      match res.2 with
-      | error _ => res
-      | _       => (ctx.insert name res.2, nil)
-    | ifElse e pT pF => match evaluate ctx e with
-      | Value.bool b => if b then pT.run ctx else pF.run ctx
-      | v            => (ctx, error $ cantEvalAsBool v)
-    | whileLoop e p  => match evaluate ctx e with
-      | Value.bool b => if !b then (ctx, nil) else
-        (Program.whileLoop e p).run (p.run ctx).1
-      | v            => (ctx, error $ cantEvalAsBool v)
-    | evaluation e   => (ctx, (evaluate ctx e))
-    | fail s         => (ctx, error s)
+    | attribution n p =>
+      let v := (p.run stt).2
+      match v with
+      | haltV _ => (stt, v)
+      | v       => (stt.with n v, nil)
+    | ifElse e pT pF => match evaluate stt e with
+      | .bool b => if b then pT.run stt else pF.run stt
+      | v            => (stt, haltV $ .err $ cantEvalAsBool v)
+    | whileLoop e p  => match evaluate stt e with
+      | .bool b =>
+        if !b then (stt, nil) else
+          match p.run stt.toWhile with
+          | (stt', haltV brk) => (stt'.toWhile stt.inWhile, nil)
+          | (stt', haltV h)   => (stt'.toWhile stt.inWhile, haltV h)
+          | (stt', _)         => (whileLoop e p).run $ stt'.toWhile stt.inWhile
+      | v       => (stt, haltV $ .err $ cantEvalAsBool v)
+    | evaluation e   => (stt, (evaluate stt e))
+    | halt brk       =>
+      if stt.inWhile
+        then (stt, haltV brk)
+        else (stt, haltV $ err cantUseBreak)
+    | halt h => (stt, haltV h)
 
 end
 
 mutual
 
-  partial def evaluateIO (ctx : Context) : Expression → IO Value
+  partial def evaluateIO (stt : State) : Expression → IO Value
     | atom v     => return v
-    | var  n     => return match ctx[n] with
-      | none   => error s!"'{n}' not found"
+    | var  n     => return match stt[n] with
+      | none   => haltV $ .err s!"'{n}' not found"
       | some v => v
-    | .not e => return match ← evaluateIO ctx e with
+    | .not e     => return match ← evaluateIO stt e with
       | .bool b => bool !b
-      | v       => error $ cantEvalAsBool v
-    | app  n  es => match ctx[n] with
-      | none              => return error s!"'{n}' not found"
+      | v       => haltV $ .err $ cantEvalAsBool v
+    | app  n es  => match stt[n] with
+      | none              => return haltV $ .err s!"'{n}' not found"
       | some (curry ns p) => match consume p ns es with
-        | (none   , p) => return (← p.runIO ctx).2
+        | (none   , p) => return (← p.runIO stt).2
         | (some ns, p) => return curry ns p
-      | _                 => return error s!"'{n}' is not a function"
-    | .add eL eR => return (← evaluateIO ctx eL).add $ ← evaluateIO ctx eR
-    | .mul eL eR => return (← evaluateIO ctx eL).mul $ ← evaluateIO ctx eR
-    | .eq  eL eR => return (← evaluateIO ctx eL).eq  $ ← evaluateIO ctx eR
-    | .ne  eL eR => return (← evaluateIO ctx eL).ne  $ ← evaluateIO ctx eR
-    | .lt  eL eR => return (← evaluateIO ctx eL).lt  $ ← evaluateIO ctx eR
-    | .le  eL eR => return (← evaluateIO ctx eL).le  $ ← evaluateIO ctx eR
-    | .gt  eL eR => return (← evaluateIO ctx eL).gt  $ ← evaluateIO ctx eR
-    | .ge  eL eR => return (← evaluateIO ctx eL).ge  $ ← evaluateIO ctx eR
+      | _        => return haltV $ .err s!"'{n}' is not a function"
+    | .add eL eR => return (← evaluateIO stt eL).add $ ← evaluateIO stt eR
+    | .mul eL eR => return (← evaluateIO stt eL).mul $ ← evaluateIO stt eR
+    | .eq  eL eR => return (← evaluateIO stt eL).eq  $ ← evaluateIO stt eR
+    | .ne  eL eR => return (← evaluateIO stt eL).ne  $ ← evaluateIO stt eR
+    | .lt  eL eR => return (← evaluateIO stt eL).lt  $ ← evaluateIO stt eR
+    | .le  eL eR => return (← evaluateIO stt eL).le  $ ← evaluateIO stt eR
+    | .gt  eL eR => return (← evaluateIO stt eL).gt  $ ← evaluateIO stt eR
+    | .ge  eL eR => return (← evaluateIO stt eL).ge  $ ← evaluateIO stt eR
 
-  partial def Program.runIO (ctx : Context := default) :
-      Program → IO (Context × Value)
-    | skip           => return (ctx, nil)
+  partial def Program.runIO (stt : State) :
+      Program → IO (State × Value)
+    | skip           => return (stt, nil)
     | sequence p₁ p₂ => do
-      let res ← p₁.runIO ctx
+      let res ← p₁.runIO stt
       match res.2 with
-      | error _ => return res
+      | haltV _ => return res
       | _       => p₂.runIO res.1
-    | attribution name p => do
-      let res ← p.runIO ctx
-      return match res.2 with
-      | error _ => res
-      | _       => (ctx.insert name res.2, nil)
-    | ifElse e pT pF => do match ← evaluateIO ctx e with
-      | Value.bool b => if b then pT.runIO ctx else pF.runIO ctx
-      | v            => return (ctx, error $ cantEvalAsBool v)
-    | whileLoop e p  => do match ← evaluateIO ctx e with
-      | Value.bool b => do
-        if !b
-          then return (ctx, nil)
-          else (Program.whileLoop e p).runIO (← p.runIO ctx).1
-      | v            => return (ctx, error $ cantEvalAsBool v)
-    | evaluation e   => return (ctx, (← evaluateIO ctx e))
-    | fail s         => return (ctx, error s)
+    | attribution n p => do
+      let v := (← p.runIO stt).2
+      match v with
+      | haltV _ => return (stt, v)
+      | v       => return (stt.with n v, nil)
+    | ifElse e pT pF => do match ← evaluateIO stt e with
+      | .bool b => if b then pT.runIO stt else pF.runIO stt
+      | v       => return (stt, haltV $ .err $ cantEvalAsBool v)
+    | whileLoop e p  => do match ← evaluateIO stt e with
+      | .bool b => do
+        if !b then return (stt, nil) else
+          return match ← p.runIO stt.toWhile with
+          | (stt', haltV brk) => (stt'.toWhile stt.inWhile, nil)
+          | (stt', haltV h)   => (stt'.toWhile stt.inWhile, haltV h)
+          | (stt', _)         => (whileLoop e p).run $ stt'.toWhile stt.inWhile
+      | v            => return (stt, haltV $ .err $ cantEvalAsBool v)
+    | evaluation e   => return (stt, (← evaluateIO stt e))
+    | halt brk       =>
+      if stt.inWhile
+        then return (stt, haltV brk)
+        else return (stt, haltV $ err cantUseBreak)
+    | halt h => return (stt, haltV h)
 
 end
+
+def Program.run! (p : Program) : Context × Value :=
+  let r := p.run State.new
+  (r.1.ctx, r.2)
+
+def Program.runIO! (p : Program) : IO (Context × Value) := do
+  let r ← p.runIO State.new
+  return (r.1.ctx, r.2)

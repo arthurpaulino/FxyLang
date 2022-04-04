@@ -53,10 +53,11 @@ partial def elabExpression : Syntax → TermElabM Expr
   | _ => throwUnsupportedSyntax
 
 partial def elabProgram : Syntax → TermElabM Expr
+  | `(program| skip)  => return mkConst ``Program.skip
+  | `(program| break) => return mkApp' ``Program.halt $ mkConst ``Halting.brk
   | `(programSeq| $p:program $[$ps:program]*) => do
     ps.foldlM (init := ← elabProgram p) fun a b => do
       mkAppM ``Program.sequence #[a, ← elabProgram b]
-  | `(program| skip) => return mkConst ``Program.skip
   | `(program| $n:ident $ns:ident* := $p:programSeq) => do
     match ns.data.map elabStringOfIdent with
     | [] => mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
@@ -96,11 +97,28 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
 
 #eval >>
-succ x := x + 1
-app1 f x := f x
-a := 7
-app1 succ a
-<<.run
+a := 0
+while a < 10 do
+  a := a + 1
+  if a = 2 then break
+break
+<<.run!
+
+#eval >>
+a := break
+<<.run!
+
+#eval >>
+f x :=
+  a := 0
+  while a = a do
+    if a > x + 5 then
+      break
+    else
+      a := a + 1
+  a
+f 10
+<<.run!
 
 def px := >>
 ((x := 1)

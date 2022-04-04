@@ -10,7 +10,7 @@ def main : List String → IO Unit
     let env ← importModules [{ module := `FxyLang.Parser }] {}
     match ← parse code env with
     | (none    , p) =>
-      let (c, r) ← p.runIO default
+      let (c, r) ← p.runIO!
       IO.println r
       IO.println c
     | (some msg, _) => IO.eprintln msg
