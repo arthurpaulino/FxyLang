@@ -308,17 +308,17 @@ mutual
     | app  n  es => match ctx[n] with
       | none              => error s!"'{n}' not found"
       | some (curry ns p) => match consume p ns es with
-        | (none, p) => (p.run ctx).2 -- actually executing the function program
-        | (some ns, p) => curry ns p -- there are still arguments to be provided
+        | (none,    p) => (p.run ctx).2
+        | (some ns, p) => curry ns p
       | _                 => error s!"'{n}' is not a function"
     | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
     | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
-    | .eq eL eR  => (evaluate ctx eL).eq $ evaluate ctx eR
-    | .ne eL eR  => (evaluate ctx eL).ne $ evaluate ctx eR
-    | .lt eL eR  => (evaluate ctx eL).lt $ evaluate ctx eR
-    | .le eL eR  => (evaluate ctx eL).le $ evaluate ctx eR
-    | .gt eL eR  => (evaluate ctx eL).gt $ evaluate ctx eR
-    | .ge eL eR  => (evaluate ctx eL).ge $ evaluate ctx eR
+    | .eq  eL eR => (evaluate ctx eL).eq  $ evaluate ctx eR
+    | .ne  eL eR => (evaluate ctx eL).ne  $ evaluate ctx eR
+    | .lt  eL eR => (evaluate ctx eL).lt  $ evaluate ctx eR
+    | .le  eL eR => (evaluate ctx eL).le  $ evaluate ctx eR
+    | .gt  eL eR => (evaluate ctx eL).gt  $ evaluate ctx eR
+    | .ge  eL eR => (evaluate ctx eL).ge  $ evaluate ctx eR
 
   partial def Program.run (ctx : Context := default) : Program → Context × Value
     | skip           => (ctx, nil)
@@ -357,17 +357,17 @@ mutual
     | app  n  es => match ctx[n] with
       | none              => return error s!"'{n}' not found"
       | some (curry ns p) => match consume p ns es with
-        | (none, p) => return (← p.runIO ctx).2 -- actually executing the function program
-        | (some ns, p) => return curry ns p -- there are still arguments to be provided
+        | (none   , p) => return (← p.runIO ctx).2
+        | (some ns, p) => return curry ns p
       | _                 => return error s!"'{n}' is not a function"
     | .add eL eR => return (← evaluateIO ctx eL).add $ ← evaluateIO ctx eR
     | .mul eL eR => return (← evaluateIO ctx eL).mul $ ← evaluateIO ctx eR
-    | .eq eL eR  => return (← evaluateIO ctx eL).eq $ ← evaluateIO ctx eR
-    | .ne eL eR  => return (← evaluateIO ctx eL).ne $ ← evaluateIO ctx eR
-    | .lt eL eR  => return (← evaluateIO ctx eL).lt $ ← evaluateIO ctx eR
-    | .le eL eR  => return (← evaluateIO ctx eL).le $ ← evaluateIO ctx eR
-    | .gt eL eR  => return (← evaluateIO ctx eL).gt $ ← evaluateIO ctx eR
-    | .ge eL eR  => return (← evaluateIO ctx eL).ge $ ← evaluateIO ctx eR
+    | .eq  eL eR => return (← evaluateIO ctx eL).eq  $ ← evaluateIO ctx eR
+    | .ne  eL eR => return (← evaluateIO ctx eL).ne  $ ← evaluateIO ctx eR
+    | .lt  eL eR => return (← evaluateIO ctx eL).lt  $ ← evaluateIO ctx eR
+    | .le  eL eR => return (← evaluateIO ctx eL).le  $ ← evaluateIO ctx eR
+    | .gt  eL eR => return (← evaluateIO ctx eL).gt  $ ← evaluateIO ctx eR
+    | .ge  eL eR => return (← evaluateIO ctx eL).ge  $ ← evaluateIO ctx eR
 
   partial def Program.runIO (ctx : Context := default) :
       Program → IO (Context × Value)
@@ -386,8 +386,10 @@ mutual
       | Value.bool b => if b then pT.runIO ctx else pF.runIO ctx
       | v            => return (ctx, error $ cantEvalAsBool v)
     | whileLoop e p  => do match ← evaluateIO ctx e with
-      | Value.bool b => return if !b then (ctx, nil) else
-        ← (Program.whileLoop e p).runIO (← p.runIO ctx).1
+      | Value.bool b => do
+        if !b
+          then return (ctx, nil)
+          else (Program.whileLoop e p).runIO (← p.runIO ctx).1
       | v            => return (ctx, error $ cantEvalAsBool v)
     | evaluation e   => return (ctx, (← evaluateIO ctx e))
     | fail s         => return (ctx, error s)

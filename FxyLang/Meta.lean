@@ -5,8 +5,8 @@
 -/
 
 import Lean
-import FunnyLang.AST
-import FunnyLang.Syntax
+import FxyLang.AST
+import FxyLang.Syntax
 
 open Lean Elab Meta
 
@@ -14,7 +14,7 @@ def mkApp' (name : Name) (e : Expr) : Expr :=
   mkApp (mkConst name) e
 
 def elabValue : Syntax → TermElabM Expr
-  | `(value|$n:numLit) =>
+  | `(value|$n:num) =>
     mkAppM ``Value.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
   | _ => throwUnsupportedSyntax
 

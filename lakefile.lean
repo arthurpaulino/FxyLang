@@ -1,6 +1,6 @@
 import Lake
 open Lake DSL
 
-package FunnyLang {
+package FxyLang {
   supportInterpreter := true
 }

@@ -5,13 +5,13 @@
 -/
 
 import Lean
-import FunnyLang.AST
-import FunnyLang.Syntax
+import FxyLang.AST
+import FxyLang.Syntax
 
 open Lean
 
 def mkValue : Syntax → Except String Value
-  | `(value|$n:numLit) => return .int n.toNat
+  | `(value|$n:num) => return .int n.toNat
   | _ => throw "error: can't parse value"
 
 partial def mkExpression : Syntax → Except String Expression

@@ -1,1 +1,0 @@
-s := 0; a := 0; while a < 5 do a := a + 1; s := s + a
