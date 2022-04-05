@@ -6,21 +6,30 @@
 
 import Std
 
+def List.unfoldStrings (l : List String) : String :=
+  l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
+
+def List.noDup [BEq α] (l : List α) : Bool :=
+  let rec noDupAux [BEq α] (l : List α) : List α → Bool
+    | []     => true
+    | a :: r => ¬ l.contains a && ¬ r.contains a && noDupAux (a :: l) r
+  noDupAux [] l
+
 /-- Non-empty list -/
 inductive NEList (α : Type)
   | uno  : α → NEList α
   | cons : α → NEList α → NEList α
   deriving Repr
 
-def List.toNEList (a : α) : List α → NEList α
+@[simp] def List.toNEList (a : α) : List α → NEList α
   | []      => .uno a
   | b :: bs => .cons a (toNEList b bs)
 
-def NEList.toList : NEList α → List α
+@[simp] def NEList.toList : NEList α → List α
   | uno  a   => [a]
   | cons a b => a :: b.toList
 
-def isEq : NEList α → List α → Prop
+@[simp] def isEq : NEList α → List α → Prop
   | .cons a as, b :: bs => a = b ∧ isEq as bs
   | .uno  a   , [b]     => a = b
   | _,          _       => False
@@ -28,55 +37,74 @@ def isEq : NEList α → List α → Prop
 theorem ListToNEListIsEqList {a : α} {as : List α} :
     isEq (as.toNEList a) (a :: as) := by
   induction as with
-  | nil            => rw [List.toNEList, isEq]
+  | nil            => simp
   | cons a' as' hi =>
     cases as' with
-    | nil      => simp only [List.toNEList, isEq]
-    | cons _ _ =>
-      simp [List.toNEList, isEq] at hi ⊢
-      exact hi
+    | nil      => simp
+    | cons _ _ => simp at hi ⊢; exact hi
 
 theorem NEListToListEqList {a : α} {as : List α} :
     (as.toNEList a).toList = a :: as := by
   induction as with
-  | nil           => rw [List.toNEList, NEList.toList]
+  | nil           => simp
   | cons _ as' hi =>
     cases as' with
-    | nil      => simp only [List.toNEList, NEList.toList]
-    | cons _ _ =>
-      simp [List.toNEList, NEList.toList] at hi ⊢
-      exact hi
+    | nil      => simp
+    | cons _ _ => simp at hi ⊢; exact hi
 
-def List.unfoldStrings (l : List String) : String :=
-  l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
+@[simp] def NEList.contains [BEq α] : NEList α → α → Bool
+  | uno a,     x => a == x
+  | cons a as, x => a == x || as.contains x
+
+theorem NEListContainsIffListContains [BEq α] {l : NEList α} :
+    l.contains x ↔ l.toList.contains x := by
+  constructor
+  · induction l with
+    | uno a        =>
+      simp
+      intro h
+      sorry
+    | cons a as hi => sorry
+  · induction l with
+    | uno a        =>
+      simp
+      intro h
+      sorry
+    | cons a as hi => sorry
+
+@[simp] def NEList.noDupAux [BEq α] (l : List α) : NEList α → Bool
+  | .uno  a   => ¬ l.contains a
+  | .cons a r => ¬ l.contains a && ¬ r.contains a && noDupAux (a :: l) r
+
+@[simp] def NEList.noDup [BEq α] (l : NEList α) : Bool :=
+  noDupAux [] l
 
 mutual
 
   inductive Value
     | nil   : Value
-    | bool  : Bool          → Value
-    | int   : Int           → Value
-    | float : Float         → Value
-    | list  : Array Value   → Value
-    | str   : String        → Value
-    | curry : NEList String → Program → Value
-    | error : String        → Value
-    deriving Inhabited, Repr
+    | bool  : Bool        → Value
+    | int   : Int         → Value
+    | float : Float       → Value
+    | list  : Array Value → Value
+    | str   : String      → Value
+    | error : String      → Value
+    | curry : (l : NEList String) → l.noDup → Program → Value
+    deriving Inhabited
 
   inductive Expression
     | atom : Value      → Expression
     | var  : String     → Expression
     | not  : Expression → Expression
-    | add  : Expression → Expression        → Expression
-    | mul  : Expression → Expression        → Expression
     | app  : String     → NEList Expression → Expression
-    | eq   : Expression → Expression        → Expression
-    | ne   : Expression → Expression        → Expression
-    | lt   : Expression → Expression        → Expression
-    | le   : Expression → Expression        → Expression
-    | gt   : Expression → Expression        → Expression
-    | ge   : Expression → Expression        → Expression
-    deriving Repr
+    | add  : Expression → Expression → Expression
+    | mul  : Expression → Expression → Expression
+    | eq   : Expression → Expression → Expression
+    | ne   : Expression → Expression → Expression
+    | lt   : Expression → Expression → Expression
+    | le   : Expression → Expression → Expression
+    | gt   : Expression → Expression → Expression
+    | ge   : Expression → Expression → Expression
 
   inductive Program
     | skip        : Program
@@ -86,26 +114,25 @@ mutual
     | whileLoop   : Expression → Program → Program
     | evaluation  : Expression → Program
     | fail        : String     → Program
-    deriving Inhabited, Repr
+    deriving Inhabited
 
 end
 
 open Value Expression Program
 
 def Program.getCurryNames? : Program → Option (NEList String)
-  | evaluation (atom (curry ns _))                              => some ns
-  | sequence (attribution _ (evaluation (atom (curry ns _)))) _ => some ns
-  | _                                                           => none
+  | evaluation (atom (curry ns ..))                              => some ns
+  | sequence (attribution _ (evaluation (atom (curry ns ..)))) _ => some ns
+  | _                                                            => none
 
 def Program.isSequence : Program → Bool
   | sequence .. => true
   | _           => false
 
-def blankAux (cs : List Char) : Nat → List Char
-  | 0     => cs
-  | n + 1 => ' ' :: ' ' :: (blankAux cs n)
-
 def blank (n : Nat) : String :=
+  let rec blankAux (cs : List Char) : Nat → List Char
+    | 0     => cs
+    | n + 1 => ' ' :: ' ' :: (blankAux cs n)
   ⟨blankAux [] n⟩
 
 mutual
@@ -117,7 +144,7 @@ mutual
     | float f   => toString f
     | list  l   => toString $ l.map fun v => valToString v
     | str   s   => s
-    | curry _ p => progToString p
+    | curry _ _ p => progToString p
     | error s   => s!"error: {s}"
 
   partial def unfoldExpressions (es : NEList Expression) : String :=
@@ -137,26 +164,25 @@ mutual
     | gt   l r  => s!"({expToString l} > {expToString r})"
     | ge   l r  => s!"({expToString l} >= {expToString r})"
 
-  partial def progToStringAux (l : Nat) : Program → String
-    | skip              => s!"{blank l}skip"
-    | sequence    p q   =>
-      s!"{blank (l-2)}{progToStringAux l p}\n{progToStringAux l q}"
-    | attribution n p   =>
-      let pString := if p.isSequence
-        then s!"\n{progToStringAux (l+2) p}"
-        else s!" {progToStringAux (l-2) p}"
-      match p.getCurryNames? with
-      | none    => s!"{blank l}{n} :=" ++ pString
-      | some ns => s!"{blank l}{n} {ns.toList.unfoldStrings} :=" ++ pString
-    | evaluation  e     => s!"{blank l}{expToString e}"
-    | whileLoop   e p   =>
-      s!"{blank l}while {expToString e} do\n{progToStringAux (l+2) p}"
-    | ifElse      e p q =>
-      s!"{blank l}if {expToString e} then\n{progToStringAux (l+2) p}\n" ++
-        s!"else\n{progToStringAux (l+2) q}"
-    | fail s            => s!"raise {s}"
-
   partial def progToString (p : Program) : String :=
+    let rec progToStringAux (l : Nat) : Program → String
+      | skip              => s!"{blank l}skip"
+      | sequence    p q   =>
+        s!"{blank (l-2)}{progToStringAux l p}\n{progToStringAux l q}"
+      | attribution n p   =>
+        let pString := if p.isSequence
+          then s!"\n{progToStringAux (l+2) p}"
+          else s!" {progToStringAux (l-2) p}"
+        match p.getCurryNames? with
+        | none    => s!"{blank l}{n} :=" ++ pString
+        | some ns => s!"{blank l}{n} {ns.toList.unfoldStrings} :=" ++ pString
+      | evaluation  e     => s!"{blank l}{expToString e}"
+      | whileLoop   e p   =>
+        s!"{blank l}while {expToString e} do\n{progToStringAux (l+2) p}"
+      | ifElse      e p q =>
+        s!"{blank l}if {expToString e} then\n{progToStringAux (l+2) p}\n" ++
+          s!"else\n{progToStringAux (l+2) q}"
+      | fail s            => s!"raise {s}"
     progToStringAux 0 p
 
 end
@@ -168,13 +194,6 @@ def Program.toString    (p : Program)    : String := progToString p
 instance : ToString Value      := ⟨toString⟩
 instance : ToString Expression := ⟨toString⟩
 instance : ToString Program    := ⟨toString⟩
-
-def Program.lengthAux (n : Nat) : Program → Nat
-  | sequence _ p => p.lengthAux (n + 1)
-  | _            => n + 1
-
-def Program.length (p : Program) : Nat :=
-  p.lengthAux 0
 
 def Value.add : Value → Value → Value
   | error s,  _        => error s
@@ -200,46 +219,46 @@ def Value.mul : Value → Value → Value
     error s!"invalid application of '*' between\n{l}\nand\n{r}"
 
 def Value.lt : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
-  | str   sL,  str   sR  => bool $ sL < sR
-  | int   iL,  int   iR  => bool $ iL < iR
-  | float fL,  float fR  => bool $ fL < fR
-  | list  lL,  list  lR  => bool $ lL.size < lR.size
-  | curry _ p, curry _ q => bool $ p.length < q.length
+  | error s,  _        => error s
+  | _,        error s  => error s
+  | str   sL, str   sR => bool $ sL < sR
+  | int   iL, int   iR => bool $ iL < iR
+  | float fL, float fR => bool $ fL < fR
+  | list  lL, list  lR => bool $ lL.size < lR.size
+  | curry .., curry .. => error "can't multiply functions"
   | l,         r         =>
     error s!"invalid application of '<' between\n{l}\nand\n{r}"
 
 def Value.le : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
-  | str   sL,  str   sR  => bool $ sL < sR || sL == sR
-  | int   iL,  int   iR  => bool $ iL ≤ iR
-  | float fL,  float fR  => bool $ fL ≤ fR
-  | list  lL,  list  lR  => bool $ lL.size ≤ lR.size
-  | curry _ p, curry _ q => bool $ p.length ≤ q.length
+  | error s,  _        => error s
+  | _,        error s  => error s
+  | str   sL, str   sR => bool $ sL < sR || sL == sR
+  | int   iL, int   iR => bool $ iL ≤ iR
+  | float fL, float fR => bool $ fL ≤ fR
+  | list  lL, list  lR => bool $ lL.size ≤ lR.size
+  | curry .., curry .. => error "can't multiply functions"
   | l,         r         =>
     error s!"invalid application of '<=' between\n{l}\nand\n{r}"
 
 def Value.gt : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
-  | str   sL,  str   sR  => bool $ sL > sR
-  | int   iL,  int   iR  => bool $ iL > iR
-  | float fL,  float fR  => bool $ fL > fR
-  | list  lL,  list  lR  => bool $ lL.size > lR.size
-  | curry _ p, curry _ q => bool $ p.length > q.length
+  | error s,  _        => error s
+  | _,        error s  => error s
+  | str   sL, str   sR => bool $ sL > sR
+  | int   iL, int   iR => bool $ iL > iR
+  | float fL, float fR => bool $ fL > fR
+  | list  lL, list  lR => bool $ lL.size > lR.size
+  | curry .., curry .. => error "can't multiply functions"
   | l,         r         =>
     error s!"invalid application of '>' between\n{l}\nand\n{r}"
 
 def Value.ge : Value → Value → Value
-  | error s,   _         => error s
-  | _,         error s   => error s
-  | str   sL,  str   sR  => bool $ sL > sR || sL == sR
-  | int   iL,  int   iR  => bool $ iL ≥ iR
-  | float fL,  float fR  => bool $ fL ≥ fR
-  | list  lL,  list  lR  => bool $ lL.size ≥ lR.size
-  | curry _ p, curry _ q => bool $ p.length ≥ q.length
+  | error s,  _        => error s
+  | _,        error s  => error s
+  | str   sL, str   sR => bool $ sL > sR || sL == sR
+  | int   iL, int   iR => bool $ iL ≥ iR
+  | float fL, float fR => bool $ fL ≥ fR
+  | list  lL, list  lR => bool $ lL.size ≥ lR.size
+  | curry .., curry .. => error "can't multiply functions"
   | l,         r         =>
     error s!"invalid application of '<=' between\n{l}\nand\n{r}"
 
@@ -307,9 +326,15 @@ mutual
       | v       => error $ cantEvalAsBool v
     | app  n es  => match ctx[n] with
       | none              => error s!"'{n}' not found"
-      | some (curry ns p) => match consume p ns es with
+      | some (curry ns h p) => match consume p ns es with
         | (none,    p) => (p.run ctx).2
-        | (some ns, p) => curry ns p
+        | (some ns, p) =>
+          --todo: prove this and extract the proof for reuse
+          have : ns.noDup := by
+            induction ns with
+            | uno n         => simp [List.contains, List.elem]
+            | cons _ ns' hi => sorry
+          curry ns this p
       | _        => error s!"'{n}' is not an uncurried function"
     | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
     | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
@@ -357,9 +382,9 @@ mutual
       | v       => error $ cantEvalAsBool v
     | app  n es  => match ctx[n] with
       | none              => return error s!"'{n}' not found"
-      | some (curry ns p) => match consume p ns es with
+      | some (curry ns h p) => match consume p ns es with
         | (none   , p) => return (← p.runIO ctx).2
-        | (some ns, p) => return curry ns p
+        | (some ns, p) => return curry ns sorry p
       | _        => return error s!"'{n}' is not an uncurried function"
     | .add eL eR => return (← evaluateIO ctx eL).add $ ← evaluateIO ctx eR
     | .mul eL eR => return (← evaluateIO ctx eL).mul $ ← evaluateIO ctx eR

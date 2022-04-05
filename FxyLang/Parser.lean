@@ -49,12 +49,16 @@ partial def mkProgram : Syntax → Except String Program
     ps.foldlM (init := ← mkProgram p) fun a b => do
       return .sequence a (← mkProgram b)
   | `(program| $n:ident $ns:ident* := $p:programSeq) =>
-    match ns.data.map $ fun i => i.getId.toString with
+    let ns := ns.data.map $ fun i => i.getId.toString
+    match ns with
     | []       => return .attribution n.getId.toString (← mkProgram p)
     | n' :: ns =>
-      return .attribution n.getId.toString $
-        .evaluation $ .atom $
-          .curry (ns.toNEList n') (← mkProgram p)
+      let n := n.getId.toString
+      let nl := ns.toNEList n'
+      if h : nl.noDup then
+        return .attribution n $ .evaluation $ .atom $
+          .curry nl h (← mkProgram p)
+      else throw s!"definition of curried function {n} has duplicated variables"
   | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
     | none   => pure $ Program.skip
@@ -115,11 +119,16 @@ def parse : String → Environment → IO (Option String × Program)
 -- f32 := f3 2
 -- "
 
+-- def code := "
+-- succ x := x + 1
+-- app1 f x := f x #sdfsf
+-- a := 7     # afa
+-- app1 succ a
+-- "
+
 def code := "
-succ x := x + 1
-app1 f x := f x #sdfsf
-a := 7     # afa
-app1 succ a
+x x := x + 5
+x 4
 "
 
 def cCode := cleanseCode code

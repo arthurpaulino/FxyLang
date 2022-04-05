@@ -60,16 +60,22 @@ partial def elabProgram : Syntax → TermElabM Expr
     ps.foldlM (init := ← elabProgram p) fun a b => do
       mkAppM ``Program.sequence #[a, ← elabProgram b]
   | `(program| $n:ident $ns:ident* := $p:programSeq) => do
-    match ns.data.map elabStringOfIdent with
+    let ns := ns.data
+    if ¬ ((ns.map fun n => n.getId.toString).noDup) then
+      throwError s!"definition of curried function {n.getId.toString} has " ++
+        "duplicated variables"
+    let ns := ns.map elabStringOfIdent -- each element represents a String
+    match ns with
     | [] => mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
     | n' :: ns =>
-      let l  ← mkListLit (Lean.mkConst ``String) ns
-      let nl ← mkAppM ``List.toNEList #[n', l]
+      let l  ← mkListLit (Lean.mkConst ``String) ns     -- List String
+      let nl ← mkAppM ``List.toNEList #[n', l]          -- NEList String
+      let h  ← mkEqRefl (← mkAppM ``NEList.noDup #[nl]) -- proof of noDup
       mkAppM ``Program.attribution #[
         elabStringOfIdent n,
         mkApp' ``Program.evaluation $
           mkApp' ``Expression.atom $
-            ← mkAppM ``Value.curry #[nl, ← elabProgram p]
+            ← mkAppM ``Value.curry #[nl, h, ← elabProgram p]
       ]
   | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
@@ -105,8 +111,7 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
 <<.run
 
 #eval >>
-f x := x
-f 4
+x x := x
 <<.run
 
 #eval >>
