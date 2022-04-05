@@ -75,26 +75,20 @@ def joinedOn (on : String) : List String → String
   | [s]           => s
   | s :: s' :: ss => s ++ on ++ joinedOn on (s' :: ss)
 
-def removeComments (l : String) : String :=
-  l.splitOn "#" |>.headD ""
-
-def replaceTabs (s : String) : String :=
-  s.replace "\t" " "
-
 def cleanseLine (l : String) : String :=
-  (replaceTabs $ removeComments l).trimRight
+  l.splitOn "#" |>.headD "" |>.trimRight.replace "\t" " "
 
 def cleanseCode (c : String) : String :=
   joinedOn "\n" $
     (c.splitOn "\n" |>.map cleanseLine).filter fun l => ¬ l.isEmpty
 
-def metaParse (c : String) : MetaM (Option String × Program) := do
-  match parseProgram (← getEnv) (cleanseCode c) with
-  | .error msg => return (some msg, default)
-  | .ok    p   => return (none, p)
+def metaParse : String → Environment → MetaM (Option String × Program)
+  | c, env => match parseProgram env (cleanseCode c) with
+    | .error msg => return (some msg, default)
+    | .ok    p   => return (none, p)
 
-def parse (c : String) (env : Environment) : IO (Option String × Program) := do
-  Prod.fst <$> (metaParse c).run'.toIO {} {env}
+def parse : String → Environment → IO (Option String × Program)
+  | c, env => Prod.fst <$> (metaParse c env).run'.toIO {} default
 
 -- def code := "
 -- ((x := 1)
@@ -123,8 +117,8 @@ def parse (c : String) (env : Environment) : IO (Option String × Program) := do
 
 def code := "
 succ x := x + 1
-app1 f x := f x
-a := 7
+app1 f x := f x #sdfsf
+a := 7     # afa
 app1 succ a
 "
 
