@@ -4,14 +4,14 @@
   Authors: Arthur Paulino
 -/
 
-declare_syntax_cat                            value
-syntax ("-" noWs)? num                      : value
-syntax str                                  : value
-syntax "true"                               : value
-syntax "false"                              : value
-syntax ("-" noWs)? num noWs "." (noWs num)? : value
-syntax withPosition("[ " colGt value* " ]") : value
-syntax "nil"                                : value
+declare_syntax_cat                             value
+syntax ("-" noWs)? num                       : value
+syntax str                                   : value
+syntax "true"                                : value
+syntax "false"                               : value
+syntax ("-" noWs)? num noWs "." (noWs num)?  : value
+syntax withPosition("[ " colGt value,* " ]") : value
+syntax "nil"                                 : value
 
 declare_syntax_cat                       expression
 syntax value                           : expression
@@ -33,13 +33,12 @@ declare_syntax_cat                      programSeq
 syntax withPosition((colGe program)+) : programSeq
 
 syntax "skip"                                                 : program
-syntax "break"                                                : program
-syntax "raise" str                                            : program
 syntax withPosition(ident+ " := " colGt programSeq)           : program
 syntax expression                                             : program
 syntax withPosition(
-  "if" expression
-  colGe "then" colGt programSeq
-  (colGe "else" colGt programSeq)?)                           : program
+  "if" expression colGe "then"
+    colGt programSeq
+  (colGe "else"
+    colGt programSeq)?)                                       : program
 syntax withPosition("while" expression "do" colGt programSeq) : program
 syntax " ( " programSeq " ) "                                 : program

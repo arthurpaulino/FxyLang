@@ -14,8 +14,10 @@ def mkApp' (name : Name) (e : Expr) : Expr :=
   mkApp (mkConst name) e
 
 def elabValue : Syntax → TermElabM Expr
-  | `(value|$n:num) =>
+  | `(value| $n:num) =>
     mkAppM ``Value.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
+  | `(value| true)  => mkAppM ``Value.bool #[mkConst ``Bool.true]
+  | `(value| false) => mkAppM ``Value.bool #[mkConst ``Bool.false]
   | _ => throwUnsupportedSyntax
 
 def elabStringOfIdent (id : Syntax) : Expr :=
@@ -54,7 +56,6 @@ partial def elabExpression : Syntax → TermElabM Expr
 
 partial def elabProgram : Syntax → TermElabM Expr
   | `(program| skip)  => return mkConst ``Program.skip
-  | `(program| break) => return mkApp' ``Program.halt $ mkConst ``Halting.brk
   | `(programSeq| $p:program $[$ps:program]*) => do
     ps.foldlM (init := ← elabProgram p) fun a b => do
       mkAppM ``Program.sequence #[a, ← elabProgram b]
@@ -72,7 +73,7 @@ partial def elabProgram : Syntax → TermElabM Expr
       ]
   | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
-    | none => pure $ mkConst ``Program.skip
+    | none   => pure $ mkConst ``Program.skip
     | some q => elabProgram q
     mkAppM ``Program.ifElse
       #[← elabExpression e, ← elabProgram p, q]
@@ -97,28 +98,22 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
 
 #eval >>
-a := 0
-while a < 10 do
-  a := a + 1
-  if a = 2 then break
-break
-<<.run!
+  if (true * (false)) then
+    a := 1
+  else
+    a := 4
+<<.run
 
 #eval >>
-a := break
-<<.run!
-
-#eval >>
-f x :=
-  a := 0
-  while a = a do
-    if a > x + 5 then
-      break
-    else
-      a := a + 1
-  a
-f 10
-<<.run!
+f n :=
+  s := 0
+  i := 0
+  while i < n do
+    i := i + 1
+    s := s + i
+  s
+f 5
+<<.run
 
 def px := >>
 ((x := 1)

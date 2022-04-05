@@ -11,7 +11,9 @@ import FxyLang.Syntax
 open Lean
 
 def mkValue : Syntax → Except String Value
-  | `(value|$n:num) => return .int n.toNat
+  | `(value| $n:num) => return .int n.toNat
+  | `(value| true)  => return .bool Bool.true
+  | `(value| false) => return .bool Bool.false
   | _ => throw "error: can't parse value"
 
 partial def mkExpression : Syntax → Except String Expression
@@ -43,7 +45,6 @@ partial def mkExpression : Syntax → Except String Expression
 
 partial def mkProgram : Syntax → Except String Program
   | `(program| skip)  => return Program.skip
-  | `(program| break) => return Program.halt Halting.brk
   | `(programSeq| $p:program $[$ps:program]*) => do
     ps.foldlM (init := ← mkProgram p) fun a b => do
       return .sequence a (← mkProgram b)
@@ -133,7 +134,7 @@ def cCode := cleanseCode code
   let p := parseProgram (← getEnv) cCode
   match p with
     | Except.ok p =>
-      let (c, r) := p.run!
+      let (c, r) := p.run
       IO.println r
       IO.println "------context-------"
       IO.println c
