@@ -60,13 +60,74 @@ theorem NEListToListEqList {a : α} {as : List α} :
     | nil      => simp only [NEList.toList]
     | cons _ _ => simp [NEList.toList] at hi ⊢; exact hi
 
-theorem NEListContainsOfListContains [BEq α] {l : NEList α}
-    (h : l.toList.contains x) : l.contains x := sorry
+theorem eqIffBEq [BEq α] [LawfulBEq α] {a b : α} : a == b ↔ a = b := by
+  constructor
+  · intro h; exact eq_of_beq h
+  · intro h; simp [h]
 
-theorem ListContainsOfNEListContains [BEq α] {l : NEList α}
-    (h : l.contains x) : l.toList.contains x := sorry
+theorem eqRfl [BEq α] {a x : α} : a = x ↔ x = a := by
+  constructor
+  all_goals
+  · intro h; simp [h]
 
-theorem NEListContainsIffListContains [BEq α] {l : NEList α} :
+theorem notEqRfl [BEq α] {a x : α} : ¬ a = x ↔ ¬ x = a := by
+  constructor
+  · intro h
+    by_cases h' : x = a
+    · simp [eqRfl, h] at h'
+    · exact h'
+  · intro h
+    by_cases h' : a = x
+    · simp [h'] at h
+    · exact h'
+
+theorem eqOfSingletonListContains [BEq α] [LawfulBEq α] {a x : α} :
+    List.contains [a] x ↔ a == x := by
+  constructor
+  · intro h
+    rw [eqIffBEq]
+    by_cases h' : a = x
+    · exact h'
+    · have : ¬ x == a := by
+        rw [eqIffBEq]
+        simp only [eqRfl, h']
+      simp [this, List.elem] at h
+  · intro h
+    rw [eqIffBEq.mp h, List.contains, List.elem]
+    simp [eqIffBEq.mpr]
+
+theorem NEListContainsOfListContains [BEq α] [LawfulBEq α] {l : NEList α}
+    (h : l.toList.contains x) : l.contains x := by
+  induction l with
+  | uno  a       => exact eqOfSingletonListContains.mp h
+  | cons a as hi =>
+    rw [NEList.toList] at h
+    simp [NEList.contains]
+    by_cases h' : a == x
+    · exact Or.inl h'
+    · simp [List.contains] at h
+      have : ¬ x == a := by
+        rw [eqIffBEq] at h' ⊢
+        exact notEqRfl.mp h'
+      simp [this, List.elem] at h
+      exact Or.inr (hi h)
+
+theorem ListContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
+    (h : l.contains x) : l.toList.contains x := by
+  induction l with
+  | uno  _      => exact eqOfSingletonListContains.mpr h
+  | cons a _ hi =>
+    rw [NEList.toList]
+    simp [NEList.contains] at h
+    cases h with | _ h => ?_
+    · simp [eqIffBEq.mp h, List.contains, List.elem]
+    · have hi := hi h
+      rw [List.contains, List.elem]
+      by_cases h' : x == a
+      · rw [h']
+      · simp [h', hi]
+
+theorem NEListContainsIffListContains [BEq α] [LawfulBEq α] {l : NEList α} :
     l.contains x ↔ l.toList.contains x :=
   ⟨by apply ListContainsOfNEListContains, by apply NEListContainsOfListContains⟩
 
@@ -292,7 +353,7 @@ def consume (p : Program) :
     consume (sequence (attribution n (evaluation e)) p) ns es
   | cons n ns, uno  e    => (some ns, sequence (attribution n (evaluation e)) p)
   | uno  n,    uno  e    => (none, sequence (attribution n (evaluation e)) p)
-  | uno  _,    cons _ _  => (none, fail "incompatible number of parameters")
+  | uno  _,    cons ..   => (none, fail "incompatible number of parameters")
 
 abbrev Context := Std.HashMap String Value
 
@@ -304,6 +365,20 @@ instance : ToString Context := ⟨Context.toString⟩
 
 def cantEvalAsBool (v : Value) : String :=
   s!"can't evaluate as bool:\n{v}"
+
+theorem noDupOfConsumeNoDup
+  (h : NEList.noDup ns) (h' : consume p' ns es = (some l, p)) :
+    NEList.noDup l = true := by
+    induction l with
+    | uno a        =>
+      rw [NEList.noDup, NEList.noDupAux, List.contains]
+      simp only [List.elem]
+    | cons a as hi =>
+      simp [NEList.noDup, NEList.noDupAux]
+      constructor constructor
+      · sorry
+      · sorry
+      · sorry
 
 mutual
 
@@ -318,13 +393,9 @@ mutual
     | app  n es  => match ctx[n] with
       | none                => error s!"'{n}' not found"
       | some (curry ns h p) =>
-        let (l?, p) := consume p ns es
-        if hs : l?.isSome then
-          let l : NEList String := l?.get hs
-          have : l.noDup := sorry
-          curry l this p
-        else
-          (p.run ctx).2
+        match h' : consume p ns es with
+        |  (some l, p) => curry l (noDupOfConsumeNoDup h h') p
+        | _            => (p.run ctx).2
       | _        => error s!"'{n}' is not an uncurried function"
     | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
     | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
@@ -373,13 +444,9 @@ mutual
     | app  n es  => match ctx[n] with
       | none                => return error s!"'{n}' not found"
       | some (curry ns h p) =>
-        let (l?, p) := consume p ns es
-        if hs : l?.isSome then
-          let l := l?.get hs
-          have : l.noDup := sorry
-          return curry l this p
-        else
-          return (← p.runIO ctx).2
+        match h' : consume p ns es with
+        |  (some l, p) => return curry l (noDupOfConsumeNoDup h h') p
+        | _            => return (← p.runIO ctx).2
       | _        => return error s!"'{n}' is not an uncurried function"
     | .add eL eR => return (← evaluateIO ctx eL).add $ ← evaluateIO ctx eR
     | .mul eL eR => return (← evaluateIO ctx eL).mul $ ← evaluateIO ctx eR
