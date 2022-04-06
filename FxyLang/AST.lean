@@ -9,9 +9,6 @@ import Std
 def List.unfoldStrings (l : List String) : String :=
   l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
 
-def Option.get : (a : Option α) → a.isSome → α
-  | some a, _ => a
-
 /-- Non-empty list -/
 inductive NEList (α : Type)
   | uno  : α → NEList α
@@ -376,9 +373,11 @@ theorem noDupOfConsumeNoDup
     | cons a as hi =>
       simp [NEList.noDup, NEList.noDupAux]
       constructor constructor
-      · sorry
-      · sorry
-      · sorry
+      · rw [List.contains, List.elem]
+      · 
+        sorry
+      · 
+        sorry
 
 mutual
 
