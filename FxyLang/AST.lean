@@ -9,11 +9,8 @@ import Std
 def List.unfoldStrings (l : List String) : String :=
   l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
 
-def List.noDup [BEq α] (l : List α) : Bool :=
-  let rec noDupAux [BEq α] (l : List α) : List α → Bool
-    | []     => true
-    | a :: r => ¬ l.contains a && ¬ r.contains a && noDupAux (a :: l) r
-  noDupAux [] l
+def Option.get : (a : Option α) → a.isSome → α
+  | some a, _ => a
 
 /-- Non-empty list -/
 inductive NEList (α : Type)
@@ -21,63 +18,57 @@ inductive NEList (α : Type)
   | cons : α → NEList α → NEList α
   deriving Repr
 
-@[simp] def List.toNEList (a : α) : List α → NEList α
+def List.toNEList (a : α) : List α → NEList α
   | []      => .uno a
   | b :: bs => .cons a (toNEList b bs)
 
-@[simp] def NEList.toList : NEList α → List α
+def NEList.toList : NEList α → List α
   | uno  a   => [a]
   | cons a b => a :: b.toList
 
-@[simp] def isEq : NEList α → List α → Prop
+def isEq : NEList α → List α → Prop
   | .cons a as, b :: bs => a = b ∧ isEq as bs
   | .uno  a   , [b]     => a = b
   | _,          _       => False
 
+def NEList.contains [BEq α] : NEList α → α → Bool
+  | uno a,     x => a == x
+  | cons a as, x => a == x || as.contains x
+
+def NEList.noDupAux [BEq α] (l : List α) : NEList α → Bool
+  | .uno  a   => ¬ l.contains a
+  | .cons a r => ¬ l.contains a && ¬ r.contains a && noDupAux (a :: l) r
+
+def NEList.noDup [BEq α] (l : NEList α) : Bool :=
+  noDupAux [] l
+
 theorem ListToNEListIsEqList {a : α} {as : List α} :
     isEq (as.toNEList a) (a :: as) := by
   induction as with
-  | nil            => simp
+  | nil            => simp only [isEq]
   | cons a' as' hi =>
     cases as' with
-    | nil      => simp
-    | cons _ _ => simp at hi ⊢; exact hi
+    | nil      => simp only [isEq]
+    | cons _ _ => simp [isEq] at hi ⊢; exact hi
 
 theorem NEListToListEqList {a : α} {as : List α} :
     (as.toNEList a).toList = a :: as := by
   induction as with
-  | nil           => simp
+  | nil           => simp only [NEList.toList]
   | cons _ as' hi =>
     cases as' with
-    | nil      => simp
-    | cons _ _ => simp at hi ⊢; exact hi
+    | nil      => simp only [NEList.toList]
+    | cons _ _ => simp [NEList.toList] at hi ⊢; exact hi
 
-@[simp] def NEList.contains [BEq α] : NEList α → α → Bool
-  | uno a,     x => a == x
-  | cons a as, x => a == x || as.contains x
+theorem NEListContainsOfListContains [BEq α] {l : NEList α}
+    (h : l.toList.contains x) : l.contains x := sorry
+
+theorem ListContainsOfNEListContains [BEq α] {l : NEList α}
+    (h : l.contains x) : l.toList.contains x := sorry
 
 theorem NEListContainsIffListContains [BEq α] {l : NEList α} :
-    l.contains x ↔ l.toList.contains x := by
-  constructor
-  · induction l with
-    | uno a        =>
-      simp
-      intro h
-      sorry
-    | cons a as hi => sorry
-  · induction l with
-    | uno a        =>
-      simp
-      intro h
-      sorry
-    | cons a as hi => sorry
-
-@[simp] def NEList.noDupAux [BEq α] (l : List α) : NEList α → Bool
-  | .uno  a   => ¬ l.contains a
-  | .cons a r => ¬ l.contains a && ¬ r.contains a && noDupAux (a :: l) r
-
-@[simp] def NEList.noDup [BEq α] (l : NEList α) : Bool :=
-  noDupAux [] l
+    l.contains x ↔ l.toList.contains x :=
+  ⟨by apply ListContainsOfNEListContains, by apply NEListContainsOfListContains⟩
 
 mutual
 
@@ -325,16 +316,15 @@ mutual
       | .bool b => bool !b
       | v       => error $ cantEvalAsBool v
     | app  n es  => match ctx[n] with
-      | none              => error s!"'{n}' not found"
-      | some (curry ns h p) => match consume p ns es with
-        | (none,    p) => (p.run ctx).2
-        | (some ns, p) =>
-          --todo: prove this and extract the proof for reuse
-          have : ns.noDup := by
-            induction ns with
-            | uno n         => simp [List.contains, List.elem]
-            | cons _ ns' hi => sorry
-          curry ns this p
+      | none                => error s!"'{n}' not found"
+      | some (curry ns h p) =>
+        let (l?, p) := consume p ns es
+        if hs : l?.isSome then
+          let l : NEList String := l?.get hs
+          have : l.noDup := sorry
+          curry l this p
+        else
+          (p.run ctx).2
       | _        => error s!"'{n}' is not an uncurried function"
     | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
     | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
@@ -381,10 +371,15 @@ mutual
       | .bool b => bool !b
       | v       => error $ cantEvalAsBool v
     | app  n es  => match ctx[n] with
-      | none              => return error s!"'{n}' not found"
-      | some (curry ns h p) => match consume p ns es with
-        | (none   , p) => return (← p.runIO ctx).2
-        | (some ns, p) => return curry ns sorry p
+      | none                => return error s!"'{n}' not found"
+      | some (curry ns h p) =>
+        let (l?, p) := consume p ns es
+        if hs : l?.isSome then
+          let l := l?.get hs
+          have : l.noDup := sorry
+          return curry l this p
+        else
+          return (← p.runIO ctx).2
       | _        => return error s!"'{n}' is not an uncurried function"
     | .add eL eR => return (← evaluateIO ctx eL).add $ ← evaluateIO ctx eR
     | .mul eL eR => return (← evaluateIO ctx eL).mul $ ← evaluateIO ctx eR
