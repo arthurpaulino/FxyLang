@@ -115,22 +115,6 @@ theorem NEListContainsOfListContains [BEq α] [LawfulBEq α] {l : NEList α}
       simp only [this, List.elem] at h
       exact Or.inr (hi h)
 
-theorem NEListContainsOfListContains' [BEq α] [LawfulBEq α] {l : NEList α}
-    (h : l.toList.contains x) : l.contains x := by
-  induction l with
-  | uno  a       => exact eqOfSingletonListContains.mp h
-  | cons a as hi =>
-    rw [NEList.toList] at h
-    simp [NEList.contains]
-    by_cases h' : a == x
-    · exact Or.inl h'
-    · simp [List.contains] at h
-      have : ¬ x == a := by
-        rw [eqIffBEq] at h' ⊢
-        exact notEqRfl.mp h'
-      simp [this, List.elem] at h
-      exact Or.inr $ hi h
-
 theorem ListContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
     (h : l.contains x) : l.toList.contains x := by
   induction l with
