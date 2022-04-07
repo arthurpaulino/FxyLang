@@ -357,7 +357,7 @@ def consume (p : Program) :
 theorem noDupOfConsumeNoDup
   (h : ns.noDup) (h' : consume p' ns es = (some l, p)) :
     NEList.noDup l = true := by
-    induction ns generalizing p' es l with
+    induction ns generalizing p' es with
     | uno  _      => cases es <;> cases h'
     | cons _ _ hi =>
       simp [NEList.noDup] at h
