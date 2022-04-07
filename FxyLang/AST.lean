@@ -32,12 +32,9 @@ def NEList.contains [BEq α] : NEList α → α → Bool
   | uno a,     x => a == x
   | cons a as, x => a == x || as.contains x
 
-def NEList.noDupAux [BEq α] (l : List α) : NEList α → Bool
-  | .uno  a   => ¬ l.contains a
-  | .cons a r => ¬ l.contains a && ¬ r.contains a && noDupAux (a :: l) r
-
-def NEList.noDup [BEq α] (l : NEList α) : Bool :=
-  noDupAux [] l
+def NEList.noDup [BEq α] : NEList α → Bool
+  | uno a => true
+  | cons a as => ¬as.contains a && as.noDup
 
 theorem ListToNEListIsEqList {a : α} {as : List α} :
     isEq (as.toNEList a) (a :: as) := by
@@ -102,18 +99,18 @@ theorem eqOfSingletonListContains [BEq α] [LawfulBEq α] {a x : α} :
 theorem NEListContainsOfListContains [BEq α] [LawfulBEq α] {l : NEList α}
     (h : l.toList.contains x) : l.contains x := by
   induction l with
-  | uno  a       => exact eqOfSingletonListContains.mp h
-  | cons a as hi =>
+  | uno  _      => exact eqOfSingletonListContains.mp h
+  | cons a _ hi =>
     rw [NEList.toList] at h
     simp [NEList.contains]
     by_cases h' : a == x
     · exact Or.inl h'
-    · simp [List.contains] at h
+    · rw [List.contains] at h
       have : ¬ x == a := by
         rw [eqIffBEq] at h' ⊢
         exact notEqRfl.mp h'
       simp only [this, List.elem] at h
-      exact Or.inr (hi h)
+      exact Or.inr $ hi h
 
 theorem ListContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
     (h : l.contains x) : l.toList.contains x := by
@@ -124,11 +121,10 @@ theorem ListContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
     simp [NEList.contains] at h
     cases h with | _ h => ?_
     · simp [eqIffBEq.mp h, List.contains, List.elem]
-    · have hi := hi h
-      rw [List.contains, List.elem]
+    · rw [List.contains, List.elem]
       by_cases h' : x == a
       · rw [h']
-      · simp only [h', hi]
+      · simp only [h', hi h]
 
 theorem NEListContainsIffListContains [BEq α] [LawfulBEq α] {l : NEList α} :
     l.contains x ↔ l.toList.contains x :=
@@ -358,6 +354,17 @@ def consume (p : Program) :
   | uno  n,    uno  e    => (none, sequence (attribution n (evaluation e)) p)
   | uno  _,    cons ..   => (none, fail "incompatible number of parameters")
 
+theorem noDupOfConsumeNoDup
+  (h : ns.noDup) (h' : consume p' ns es = (some l, p)) :
+    NEList.noDup l = true := by
+    induction ns generalizing p' es l with
+    | uno  _      => cases es <;> cases h'
+    | cons _ _ hi =>
+      simp [NEList.noDup] at h
+      cases es with
+      | uno  _   => simp [consume] at h'; simp only [h.2, ← h'.1]
+      | cons _ _ => exact hi h.2 h'
+
 abbrev Context := Std.HashMap String Value
 
 protected def Context.toString (c : Context) : String :=
@@ -368,22 +375,6 @@ instance : ToString Context := ⟨Context.toString⟩
 
 def cantEvalAsBool (v : Value) : String :=
   s!"can't evaluate as bool:\n{v}"
-
-theorem noDupOfConsumeNoDup
-  (h : NEList.noDup ns) (h' : consume p' ns es = (some l, p)) :
-    NEList.noDup l = true := by
-    induction l with
-    | uno a        =>
-      rw [NEList.noDup, NEList.noDupAux, List.contains]
-      simp only [List.elem]
-    | cons a as hi =>
-      simp [NEList.noDup, NEList.noDupAux]
-      constructor constructor
-      · rw [List.contains, List.elem]
-      · 
-        sorry
-      · 
-        sorry
 
 mutual
 
