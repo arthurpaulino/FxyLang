@@ -9,6 +9,10 @@ import Std
 def List.unfoldStrings (l : List String) : String :=
   l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
 
+def List.noDup [BEq α] : List α → Bool
+  | []      => true
+  | a :: as => ¬as.contains a && as.noDup
+
 /-- Non-empty list -/
 inductive NEList (α : Type)
   | uno  : α → NEList α
@@ -390,8 +394,8 @@ mutual
       | none                => error s!"'{n}' not found"
       | some (curry ns h p) =>
         match h' : consume p ns es with
-        |  (some l, p) => curry l (noDupOfConsumeNoDup h h') p
-        | _            => (p.run ctx).2
+        | (some l, p) => curry l (noDupOfConsumeNoDup h h') p
+        | (none,   p) => (p.run ctx).2
       | _        => error s!"'{n}' is not an uncurried function"
     | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
     | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
@@ -441,8 +445,8 @@ mutual
       | none                => return error s!"'{n}' not found"
       | some (curry ns h p) =>
         match h' : consume p ns es with
-        |  (some l, p) => return curry l (noDupOfConsumeNoDup h h') p
-        | _            => return (← p.runIO ctx).2
+        | (some l, p) => return curry l (noDupOfConsumeNoDup h h') p
+        | (none,   p) => return (← p.runIO ctx).2
       | _        => return error s!"'{n}' is not an uncurried function"
     | .add eL eR => return (← evaluateIO ctx eL).add $ ← evaluateIO ctx eR
     | .mul eL eR => return (← evaluateIO ctx eL).mul $ ← evaluateIO ctx eR
