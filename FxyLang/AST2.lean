@@ -283,19 +283,22 @@ inductive ProgramResult
   | val  : Value   → ProgramResult
 
 def Program.step (ctx : Context) : Program → Context × ProgramResult
-  | skip         => (ctx, .val .nil)
-  | fail m       => (ctx, .val $ .error m)
-  | eval e       => (ctx, .val $ ctx.evaluate e)
-  | seq p₁ p₂    => match p₁.step ctx with
-    | (ctx, .val (.error s)) => (ctx, .val (.error s))
-    | (ctx, .val _)          => (ctx, .prog p₂) -- discarding value of p₁
-    | (ctx, .prog p)         => (ctx, .prog (seq p p₂))
+  | skip      => (ctx, .val .nil)
+  | fail m    => (ctx, .val $ .error m)
+  | eval e    => (ctx, .val $ ctx.evaluate e)
+
+  | seq p₁ p₂ => match p₁.step ctx with
+    | r@(ctx, .val (.error _)) => r
+    | (ctx, .val _)            => (ctx, .prog p₂) -- discarding value of p₁
+    | (ctx, .prog p)           => (ctx, .prog (seq p p₂))
+
   | decl n p    => match p.step ctx with
-    | (ctx, .val v) => (ctx.insert n v, .val .nil)
+    | (_, .val v) => (ctx.insert n v, .val .nil)
     | res           => res
-  | loop (fail m) _  => (ctx, .prog $ .fail m)
+
+  | loop p@(fail _) _ => (ctx, .prog $ p)
   | loop (eval e) p   => match ctx.evaluate e with
-    | .error s  => (ctx, .val (.error s))
+    | er@(.error _)   => (ctx, .val er)
     | .bool b   =>
       if b then (ctx, .prog (loop (eval e) p)) else (ctx, .val .nil)
     | .thunk p? => (ctx, .prog $ fork p? (loop (eval e) p) skip)
@@ -308,15 +311,15 @@ def Program.step (ctx : Context) : Program → Context × ProgramResult
     | (_, .val v) => (ctx, .val (.error (cantEvalAsBool v)))
     | (_, .prog $ p') => (ctx, .prog $ loop p' p)
 
-  | fork (fail m) ..  => (ctx, .prog $ .fail m)
-  | fork (eval e) p q => match ctx.evaluate e with
-    | .error s  => (ctx, .val (.error s))
-    | .bool b   => if b then p.step ctx else q.step ctx
-    | .thunk p? => (ctx, .prog $ fork p? p q)
-    | v         => (ctx, .val (.error (cantEvalAsBool v)))
-  | fork p? p q       =>
+  | fork p@(fail _) .. => (ctx, .prog $ p)
+  | fork (eval e) p q  => match ctx.evaluate e with
+    | er@(.error _) => (ctx, .val er)
+    | .bool b       => if b then p.step ctx else q.step ctx
+    | .thunk p?     => (ctx, .prog $ fork p? p q)
+    | v             => (ctx, .val (.error (cantEvalAsBool v)))
+  | fork p? p q        =>
     match p?.step ctx with
     | (_, .val $ .error m) => (ctx, .prog $ .fail m)
-    | (_, .val $ .bool b) => if b then p.step ctx else q.step ctx
-    | (_, .val v) => (ctx, .val (.error (cantEvalAsBool v)))
-    | (_, .prog $ p') => (ctx, .prog $ fork p' p q)
+    | (_, .val $ .bool b)  => if b then p.step ctx else q.step ctx
+    | (_, .val v)          => (ctx, .val (.error (cantEvalAsBool v)))
+    | (_, .prog $ p')      => (ctx, .prog $ fork p' p q)
