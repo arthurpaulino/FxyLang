@@ -20,6 +20,14 @@ def NEList.foldl (f : α → β → α) : (init : α) → NEList β → α
   | a, uno  b   => f a b
   | a, cons b l => foldl f (f a b) l
 
+@[specialize]
+def NEList.map (f : α → β) : NEList α → NEList β
+  | uno  a     => uno  (f a)
+  | cons a  as => cons (f a) (map f as)
+
+def NEList.unfoldStrings (l : NEList String) : String :=
+  l.foldl (init := "") $ fun acc a => acc ++ s!" {a}" |>.trimLeft
+
 def NEList.contains [BEq α] : NEList α → α → Bool
   | uno  a,    x => a == x
   | cons a as, x => a == x || as.contains x
@@ -48,10 +56,10 @@ inductive Expression
 
 inductive Program
   | skip : Program
-  | fail : String     → Program
+  | fail : String  → Program
   | eval : Expression → Program
-  | seq  : Program    → Program → Program
-  | decl : String     → Program → Program
+  | decl : String  → Program → Program
+  | seq  : Program → Program → Program
   | loop : Expression → Program → Program
   | fork : Expression → Program → Program → Program
 
@@ -64,6 +72,8 @@ inductive Value
   | error : String → Value
   | list  : Array Value → Value
   | lam   : (l : NEList String) → l.noDup → Program → Value
+  | prog  : Program → Value
+  deriving Inhabited
 
 protected partial def Value.toString : Value → String
   | .nil    => "nil"
@@ -73,25 +83,33 @@ protected partial def Value.toString : Value → String
   | list  l => toString $ l.data.map fun v => Value.toString v
   | str   s => s
   | lam ..  => "«function»"
+  | prog _  => "«program»"
   | error s => s!"error: {s}"
 
-protected partial def Expression.toString : Expression → String
-  | var  n    => n
-  | .bool b => toString b
-  | int   i => toString i
-  | float f => toString f
-  | list  l => toString $ l.map fun v => Expression.toString v
-  | str   s => s
-  | .not e    => s!"(! {Expression.toString e})"
-  | app  n es => s!"({n} {unfoldExpressions es})"
-  | add  l r  => s!"({Expression.toString l} + {Expression.toString r})"
-  | mul  l r  => s!"({Expression.toString l} * {Expression.toString r})"
-  | eq   l r  => s!"({Expression.toString l} = {Expression.toString r})"
-  | ne   l r  => s!"({Expression.toString l} != {Expression.toString r})"
-  | lt   l r  => s!"({Expression.toString l} < {Expression.toString r})"
-  | le   l r  => s!"({Expression.toString l} <= {Expression.toString r})"
-  | gt   l r  => s!"({Expression.toString l} > {Expression.toString r})"
-  | ge   l r  => s!"({Expression.toString l} >= {Expression.toString r})"
+mutual
+
+  partial def unfoldExpressions (es : NEList Expression) : String :=
+    (es.map fun e => Expression.toString e).unfoldStrings
+
+  protected partial def Expression.toString : Expression → String
+    | var   n    => n
+    | .bool b    => toString b
+    | int   i    => toString i
+    | float f    => toString f
+    | list  l    => toString $ l.map fun v => Expression.toString v
+    | str   s    => s
+    | .not  e    => s!"(! {Expression.toString e})"
+    | app   n es => s!"({n} {unfoldExpressions es})"
+    | add   l r  => s!"({Expression.toString l} + {Expression.toString r})"
+    | mul   l r  => s!"({Expression.toString l} * {Expression.toString r})"
+    | eq    l r  => s!"({Expression.toString l} = {Expression.toString r})"
+    | ne    l r  => s!"({Expression.toString l} != {Expression.toString r})"
+    | lt    l r  => s!"({Expression.toString l} < {Expression.toString r})"
+    | le    l r  => s!"({Expression.toString l} <= {Expression.toString r})"
+    | gt    l r  => s!"({Expression.toString l} > {Expression.toString r})"
+    | ge    l r  => s!"({Expression.toString l} >= {Expression.toString r})"
+
+end
 
 instance : ToString Expression := ⟨Expression.toString⟩
 instance : ToString Value      := ⟨Value.toString⟩
@@ -104,7 +122,8 @@ def Value.typeStr : Value → String
   | str   _  => "str"
   | error _  => "error"
   | list  _  => "list"
-  | lam l .. => (l.foldl (init := "") fun acc _ => acc ++ "_ → ") ++ "_"
+  | lam l .. => (l.foldl (init := "") fun acc _ => acc ++ "_ → ") ++ "program"
+  | prog _   => "program"
 
 def Value.add : Value → Value → Value
   | error s,  _        => error s
@@ -211,17 +230,15 @@ def cantEvalAsBool (e : Expression) (v : Value) : String :=
 def notFound (n : String) : String :=
   s!"'{n}' not found"
 
-open NEList in
 def consume (p : Program) :
     NEList String → NEList Expression → (Option (NEList String)) × Program
-  | cons n ns, cons e es => consume (.seq (.decl n (.eval e)) p) ns es
-  | cons n ns, uno  e    => (some ns, .seq (.decl n (.eval e)) p)
-  | uno  n,    uno  e    => (none, .seq (.decl n (.eval e)) p)
-  | uno  _,    cons ..   => (none, .fail "incompatible number of parameters")
+  | .cons n ns, .cons e es => consume (.seq (.decl n (.eval e)) p) ns es
+  | .cons n ns, .uno  e    => (some ns, .seq (.decl n (.eval e)) p)
+  | .uno  n,    .uno  e    => (none, .seq (.decl n (.eval e)) p)
+  | .uno  _,    .cons ..   => (none, .fail "incompatible number of parameters")
 
 theorem noDupOfConsumeNoDup
-  (h : ns.noDup) (h' : consume p' ns es = (some l, p)) :
-    NEList.noDup l = true := by
+  (h : ns.noDup) (h' : consume p' ns es = (some l, p)) : l.noDup = true := by
     induction ns generalizing p' es with
     | uno  _      => cases es <;> cases h'
     | cons _ _ hi =>
@@ -230,32 +247,28 @@ theorem noDupOfConsumeNoDup
       | uno  _   => simp [consume] at h'; simp only [h.2, ← h'.1]
       | cons _ _ => exact hi h.2 h'
 
-inductive ProgramResult
-  | prog : Program → ProgramResult
-  | val  : Value   → ProgramResult
-
 abbrev Context := Std.HashMap String Value
 
-def Context.evaluate (ctx : Context) : Expression → ProgramResult
-  | .bool  b => .val $ .bool b
-  | .int   i => .val $ .int i
-  | .float f => .val $ .float f
-  | .str s   => .val $ .str s
+partial def Context.evaluate (ctx : Context) : Expression → Value
+  | .bool  b => .bool b
+  | .int   i => .int i
+  | .float f => .float f
+  | .str s   => .str s
   | .var n   => match ctx[n] with
-    | none   => .val $ .error $ notFound n
-    | some v => .val v
-  | .list  l => sorry --.list ⟨l.map (evaluate ctx)⟩
+    | none   => .error $ notFound n
+    | some v => v
+  | .list  l => .list ⟨l.map (evaluate ctx)⟩
   | .not   e => match evaluate ctx e with
-    | .val $ .bool b => .val $ .bool !b
-    | .val v         => .val $ .error $ cantEvalAsBool e v
-    | .prog p        => .prog p
+    | .bool b     => .bool !b
+    | .prog p => .prog p
+    | v           => .error $ cantEvalAsBool e v
   | .app n es => match ctx[n] with
-    | none               => .val $ .error $ notFound n
+    | none               => .error $ notFound n
     | some (.lam ns h p) =>
       match h' : consume p ns es with
-      | (some l, p) => .val $ .lam l (noDupOfConsumeNoDup h h') p
+      | (some l, p) => .lam l (noDupOfConsumeNoDup h h') p
       | (none,   p) => .prog p
-    | _        => .val $ .error s!"'{n}' is not an uncurried function"
+    | _        => .error s!"'{n}' is not an uncurried function"
   | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
   | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
   | .eq  eL eR => (evaluate ctx eL).eq  $ evaluate ctx eR
@@ -265,24 +278,43 @@ def Context.evaluate (ctx : Context) : Expression → ProgramResult
   | .gt  eL eR => (evaluate ctx eL).gt  $ evaluate ctx eR
   | .ge  eL eR => (evaluate ctx eL).ge  $ evaluate ctx eR
 
+inductive ProgramResult
+  | prog : Program → ProgramResult
+  | val  : Value   → ProgramResult
+
 def Program.step (ctx : Context) : Program → Context × ProgramResult
-  | skip       => (ctx, .val .nil)
-  | fail m     => (ctx, .val $ .error m)
-  | eval e     => (ctx, ctx.evaluate e)
-  | seq p₁ p₂  => match p₁.step ctx with
+  | skip         => (ctx, .val .nil)
+  | fail m       => (ctx, .val $ .error m)
+  | eval e       => (ctx, .val $ ctx.evaluate e)
+  | seq p₁ p₂    => match p₁.step ctx with
     | (ctx, .val (.error s)) => (ctx, .val (.error s))
     | (ctx, .val _)          => (ctx, .prog p₂) -- discarding value of p₁
     | (ctx, .prog p)         => (ctx, .prog (seq p p₂))
-  | decl n p   => match p.step ctx with
+  | decl n p    => match p.step ctx with
     | (ctx, .val v) => (ctx.insert n v, .val .nil)
     | res           => res
-  | loop e p   => match ctx.evaluate e with
-    | .val $ .error s => (ctx, .val (.error s))
-    | .val $ .bool b  => if !b then (ctx, .prog (loop e p)) else (ctx, .val .nil)
-    | .val $ v        => (ctx, .val (.error (cantEvalAsBool e v)))
-    | .prog p         => sorry
-  | fork e p q => match ctx.evaluate e with
-    | .val $ .error s => (ctx, .val (.error s))
-    | .val $ .bool b  => if !b then p.step ctx else q.step ctx
-    | .val $ v        => (ctx, .val (.error (cantEvalAsBool e v)))
-    | .prog p         => sorry
+  | loop e p     => match ctx.evaluate e with
+    | .error s => (ctx, .val (.error s))
+    | .bool b  => if b then (ctx, .prog (loop e p)) else (ctx, .val .nil)
+    | .prog p? => sorry
+    | v        => (ctx, .val (.error (cantEvalAsBool e v)))
+  | fork e pT pF => match ctx.evaluate e with
+    | .error s => (ctx, .val (.error s))
+    | .bool b  => if b then pT.step ctx else pF.step ctx
+    | .prog p? => sorry
+    | v        => (ctx, .val (.error (cantEvalAsBool e v)))
+  -- | loop (eval e) p   => match ctx.evaluate e with
+  --   | .error s => (ctx, .val (.error s))
+  --   | .bool b  => if b then (ctx, .prog (loop (eval e) p)) else (ctx, .val .nil)
+  --   | .prog p? => (ctx, .prog $ fork p? (loop (eval e) p) skip)
+  --   | v        => (ctx, .val (.error (cantEvalAsBool e v)))
+  -- | loop p? p         => (ctx, .prog $ loop p? p)
+  -- | fork (eval e) p q => match ctx.evaluate e with
+  --   | .error s => (ctx, .val (.error s))
+  --   | .bool b  => if b then p.step ctx else q.step ctx
+  --   | .prog p?        => (ctx, .prog $ fork p? p q)
+  --   | v          => (ctx, .val (.error (cantEvalAsBool e v)))
+  -- | fork p? p q       =>
+    -- match p?.step ctx with
+    -- | (ctx, .val $ .error s) => 
+    -- (ctx, .prog $ fork p? p q)
