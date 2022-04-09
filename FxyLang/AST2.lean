@@ -60,8 +60,8 @@ inductive Program
   | eval : Expression → Program
   | decl : String  → Program → Program
   | seq  : Program → Program → Program
-  | loop : Expression → Program → Program
-  | fork : Expression → Program → Program → Program
+  | loop : Program → Program → Program
+  | fork : Program → Program → Program → Program
 
 inductive Value
   | nil   : Value
@@ -72,7 +72,7 @@ inductive Value
   | error : String → Value
   | list  : Array Value → Value
   | lam   : (l : NEList String) → l.noDup → Program → Value
-  | prog  : Program → Value
+  | thunk : Program → Value
   deriving Inhabited
 
 protected partial def Value.toString : Value → String
@@ -83,7 +83,7 @@ protected partial def Value.toString : Value → String
   | list  l => toString $ l.data.map fun v => Value.toString v
   | str   s => s
   | lam ..  => "«function»"
-  | prog _  => "«program»"
+  | thunk _ => "«thunk»"
   | error s => s!"error: {s}"
 
 mutual
@@ -122,8 +122,8 @@ def Value.typeStr : Value → String
   | str   _  => "str"
   | error _  => "error"
   | list  _  => "list"
-  | lam l .. => (l.foldl (init := "") fun acc _ => acc ++ "_ → ") ++ "program"
-  | prog _   => "program"
+  | lam l .. => (l.foldl (init := "") fun acc _ => acc ++ "_ → ") ++ "thunk"
+  | thunk _  => "thunk"
 
 def Value.add : Value → Value → Value
   | error s,  _        => error s
@@ -224,8 +224,8 @@ partial def Value.ne : Value → Value → Value
   | lam ..,   lam ..   => error "can't compare functions"
   | _,        _        => bool true
 
-def cantEvalAsBool (e : Expression) (v : Value) : String :=
-  s!"can't evaluate {e} as bool. expression results in {v}, of type {v.typeStr}"
+def cantEvalAsBool (v : Value) : String :=
+  s!"can't evaluate {v} as bool. expressionhas type {v.typeStr}"
 
 def notFound (n : String) : String :=
   s!"'{n}' not found"
@@ -259,15 +259,15 @@ partial def Context.evaluate (ctx : Context) : Expression → Value
     | some v => v
   | .list  l => .list ⟨l.map (evaluate ctx)⟩
   | .not   e => match evaluate ctx e with
-    | .bool b     => .bool !b
-    | .prog p => .prog p
-    | v           => .error $ cantEvalAsBool e v
+    | .bool b  => .bool !b
+    | .thunk p => .thunk p
+    | v        => .error $ cantEvalAsBool v
   | .app n es => match ctx[n] with
     | none               => .error $ notFound n
     | some (.lam ns h p) =>
       match h' : consume p ns es with
       | (some l, p) => .lam l (noDupOfConsumeNoDup h h') p
-      | (none,   p) => .prog p
+      | (none,   p) => .thunk p
     | _        => .error s!"'{n}' is not an uncurried function"
   | .add eL eR => (evaluate ctx eL).add $ evaluate ctx eR
   | .mul eL eR => (evaluate ctx eL).mul $ evaluate ctx eR
@@ -293,28 +293,30 @@ def Program.step (ctx : Context) : Program → Context × ProgramResult
   | decl n p    => match p.step ctx with
     | (ctx, .val v) => (ctx.insert n v, .val .nil)
     | res           => res
-  | loop e p     => match ctx.evaluate e with
-    | .error s => (ctx, .val (.error s))
-    | .bool b  => if b then (ctx, .prog (loop e p)) else (ctx, .val .nil)
-    | .prog p? => sorry
-    | v        => (ctx, .val (.error (cantEvalAsBool e v)))
-  | fork e pT pF => match ctx.evaluate e with
-    | .error s => (ctx, .val (.error s))
-    | .bool b  => if b then pT.step ctx else pF.step ctx
-    | .prog p? => sorry
-    | v        => (ctx, .val (.error (cantEvalAsBool e v)))
-  -- | loop (eval e) p   => match ctx.evaluate e with
-  --   | .error s => (ctx, .val (.error s))
-  --   | .bool b  => if b then (ctx, .prog (loop (eval e) p)) else (ctx, .val .nil)
-  --   | .prog p? => (ctx, .prog $ fork p? (loop (eval e) p) skip)
-  --   | v        => (ctx, .val (.error (cantEvalAsBool e v)))
-  -- | loop p? p         => (ctx, .prog $ loop p? p)
-  -- | fork (eval e) p q => match ctx.evaluate e with
-  --   | .error s => (ctx, .val (.error s))
-  --   | .bool b  => if b then p.step ctx else q.step ctx
-  --   | .prog p?        => (ctx, .prog $ fork p? p q)
-  --   | v          => (ctx, .val (.error (cantEvalAsBool e v)))
-  -- | fork p? p q       =>
-    -- match p?.step ctx with
-    -- | (ctx, .val $ .error s) => 
-    -- (ctx, .prog $ fork p? p q)
+  | loop (fail m) _  => (ctx, .prog $ .fail m)
+  | loop (eval e) p   => match ctx.evaluate e with
+    | .error s  => (ctx, .val (.error s))
+    | .bool b   =>
+      if b then (ctx, .prog (loop (eval e) p)) else (ctx, .val .nil)
+    | .thunk p? => (ctx, .prog $ fork p? (loop (eval e) p) skip)
+    | v         => (ctx, .val (.error (cantEvalAsBool v)))
+  | loop p? p         =>
+    match p?.step ctx with
+    | (_, .val $ .error m) => (ctx, .prog $ .fail m)
+    | (_, .val $ .bool b) =>
+      if b then (ctx, .prog (loop p? p)) else (ctx, .val .nil)
+    | (_, .val v) => (ctx, .val (.error (cantEvalAsBool v)))
+    | (_, .prog $ p') => (ctx, .prog $ loop p' p)
+
+  | fork (fail m) ..  => (ctx, .prog $ .fail m)
+  | fork (eval e) p q => match ctx.evaluate e with
+    | .error s  => (ctx, .val (.error s))
+    | .bool b   => if b then p.step ctx else q.step ctx
+    | .thunk p? => (ctx, .prog $ fork p? p q)
+    | v         => (ctx, .val (.error (cantEvalAsBool v)))
+  | fork p? p q       =>
+    match p?.step ctx with
+    | (_, .val $ .error m) => (ctx, .prog $ .fail m)
+    | (_, .val $ .bool b) => if b then p.step ctx else q.step ctx
+    | (_, .val v) => (ctx, .val (.error (cantEvalAsBool v)))
+    | (_, .prog $ p') => (ctx, .prog $ fork p' p q)
