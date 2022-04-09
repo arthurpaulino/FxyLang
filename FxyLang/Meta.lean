@@ -111,6 +111,16 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
 <<.run
 
 #eval >>
+a := 1
+
+f x :=
+  a := 2
+  x
+
+q := f 5
+<<.run
+
+#eval >>
 x x := x
 x 4
 <<.run
