@@ -5,8 +5,8 @@
 -/
 
 import Lean
-import FxyLang.AST
-import FxyLang.Syntax
+import FxyLang.Old.AST
+import FxyLang.Old.Syntax
 
 open Lean
 

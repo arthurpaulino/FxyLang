@@ -5,26 +5,26 @@
 -/
 
 import Lean
-import FxyLang.ASTExecution
-import FxyLang.Syntax
+import FxyLang.Old.AST
+import FxyLang.Old.Syntax
 
 open Lean Elab Meta
 
 def mkApp' (name : Name) (e : Expr) : Expr :=
   mkApp (mkConst name) e
 
-def elabLiteral : Syntax → TermElabM Expr
-  | `(literal| $n:num) =>
-    mkAppM ``Literal.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
-  | `(literal| true)  => mkAppM ``Literal.bool #[mkConst ``Bool.true]
-  | `(literal| false) => mkAppM ``Literal.bool #[mkConst ``Bool.false]
+def elabValue : Syntax → TermElabM Expr
+  | `(value| $n:num) =>
+    mkAppM ``Value.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
+  | `(value| true)  => mkAppM ``Value.bool #[mkConst ``Bool.true]
+  | `(value| false) => mkAppM ``Value.bool #[mkConst ``Bool.false]
   | _ => throwUnsupportedSyntax
 
 def elabStringOfIdent (id : Syntax) : Expr :=
   mkStrLit id.getId.toString
 
 partial def elabExpression : Syntax → TermElabM Expr
-  | `(expression| $v:literal) => do mkAppM ``Expression.lit #[← elabLiteral v]
+  | `(expression| $v:value) => do mkAppM ``Expression.atom #[← elabValue v]
   | `(expression| ! $e:expression) => do
     mkAppM ``Expression.not #[← elabExpression e]
   | `(expression| $n:ident) => mkAppM ``Expression.var #[elabStringOfIdent n]
@@ -58,7 +58,7 @@ partial def elabProgram : Syntax → TermElabM Expr
   | `(program| skip)  => return mkConst ``Program.skip
   | `(programSeq| $p:program $[$ps:program]*) => do
     ps.foldlM (init := ← elabProgram p) fun a b => do
-      mkAppM ``Program.seq #[a, ← elabProgram b]
+      mkAppM ``Program.sequence #[a, ← elabProgram b]
   | `(program| $n:ident $ns:ident* := $p:programSeq) => do
     let ns := ns.data
     if ¬ ((ns.map fun n => n.getId.toString).noDup) then
@@ -66,27 +66,27 @@ partial def elabProgram : Syntax → TermElabM Expr
         "duplicated variables"
     let ns := ns.map elabStringOfIdent -- each element represents a String
     match ns with
-    | [] => mkAppM ``Program.decl #[elabStringOfIdent n, ← elabProgram p]
+    | [] => mkAppM ``Program.attribution #[elabStringOfIdent n, ← elabProgram p]
     | n' :: ns =>
       let l  ← mkListLit (Lean.mkConst ``String) ns     -- List String
       let nl ← mkAppM ``List.toNEList #[n', l]          -- NEList String
       let h  ← mkEqRefl (← mkAppM ``NEList.noDup #[nl]) -- proof of noDup
-      mkAppM ``Program.decl #[
+      mkAppM ``Program.attribution #[
         elabStringOfIdent n,
-        mkApp' ``Program.eval $
-          mkApp' ``Expression.lam $
-            ← mkAppM ``Lambda.mk #[nl, h, ← elabProgram p]
+        mkApp' ``Program.evaluation $
+          mkApp' ``Expression.atom $
+            ← mkAppM ``Value.curry #[nl, h, ← elabProgram p]
       ]
-  | `(program| if $p?:programSeq then $p:programSeq $[else $q:programSeq]?) =>do
+  | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
     | none   => pure $ mkConst ``Program.skip
     | some q => elabProgram q
-    mkAppM ``Program.fork
-      #[← elabProgram p?, ← elabProgram p, q]
-  | `(program| while $p?:programSeq do $p:programSeq) => do
-    mkAppM ``Program.loop #[← elabProgram p?, ← elabProgram p]
+    mkAppM ``Program.ifElse
+      #[← elabExpression e, ← elabProgram p, q]
+  | `(program| while $e:expression do $p:programSeq) => do
+    mkAppM ``Program.whileLoop #[← elabExpression e, ← elabProgram p]
   | `(program| $e:expression) => do
-    mkAppM ``Program.eval #[← elabExpression e]
+    mkAppM ``Program.evaluation #[← elabExpression e]
   | `(program| ($p:programSeq)) => elabProgram p
   | _ => throwUnsupportedSyntax
 
@@ -111,26 +111,6 @@ b x := 2 * x
 <<.run
 
 #eval >>
-a := 0
-while a do
-  a := a + 1
-<<
-
-#eval >>
-  if 1 < 0 then
-    a := 1
-  else
-    a := 4
-<<.run
-
-#eval >>
-  if true * (false) then
-    a := 1
-  else
-    a := 4
-<<.run
-
-#eval >>
   if (true * (false)) then
     a := 1
   else
@@ -152,7 +132,7 @@ x x := x
 x 4
 <<.run
 
-#eval >
+#eval >>
 f n :=
   s := 0
   i := 0
