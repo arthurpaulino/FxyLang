@@ -70,13 +70,13 @@ partial def elabProgram : Syntax → TermElabM Expr
           mkApp' ``Expression.lam $
             ← mkAppM ``Lambda.mk #[nl, h, ← elabProgram p]
       ]
-  | `(program| if $p?:program then $p:programSeq $[else $q:programSeq]?) => do
+  | `(program| if $p?:programSeq then $p:programSeq $[else $q:programSeq]?) =>do
     let q ← match q with
     | none   => return mkConst ``Program.skip
     | some q => elabProgram q
     mkAppM ``Program.fork
       #[← elabProgram p?, ← elabProgram p, q]
-  | `(program| while $p?:program do $p:programSeq) => do
+  | `(program| while $p?:programSeq do $p:programSeq) => do
     mkAppM ``Program.loop #[← elabProgram p?, ← elabProgram p]
   | `(program| $e:expression) => do
     mkAppM ``Program.eval #[← elabExpression e]
@@ -85,7 +85,6 @@ partial def elabProgram : Syntax → TermElabM Expr
   | `(program| $pₗ:program $o:binop $pᵣ:program) => do
     mkAppM ``Program.binOp #[← elabBinOp o, ← elabProgram pₗ, ← elabProgram pᵣ]
   | `(program| ($p:programSeq)) => elabProgram p
-  | `(program| ($p:program)) => elabProgram p
   | _ => throwUnsupportedSyntax
 
 ------- ↓↓ testing area ↓↓

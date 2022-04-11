@@ -39,11 +39,10 @@ syntax expression                                   : program
 syntax " ! " programSeq                             : program
 syntax program binop program                        : program
 syntax withPosition(
-  "if " program colGe " then "
+  "if " programSeq colGe " then "
     colGt programSeq
   (colGe " else "
     colGt programSeq)?)                             : program
-syntax withPosition("while " program " do "
+syntax withPosition("while " programSeq " do "
   colGt programSeq)                                 : program
 syntax " ( " programSeq " ) "                       : program
-syntax " ( " program " ) "                          : program
