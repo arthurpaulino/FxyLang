@@ -110,9 +110,9 @@ b x := 2 * x
 (b 1) > (a 1)
 <<.run
 
-#eval >>
+#eval >
 a := 0
-while a do
+while a < 5 do
   a := a + 1
 <<.run
 

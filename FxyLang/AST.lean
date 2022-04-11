@@ -37,8 +37,8 @@ mutual
     | eval  : Expression → Program
     | decl  : String  → Program → Program
     | seq   : Program → Program → Program
-    | loop  : Program → Program → Program
     | fork  : Program → Program → Program → Program
+    | loop  : Program → Program → Program
     | binOp : BinOp → Program → Program → Program
     | unOp  : UnOp  → Program → Program
 

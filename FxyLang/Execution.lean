@@ -74,7 +74,7 @@ def Program.step (ctx : Context) : Program → Context × Result
 
   | seq p₁ p₂ => match p₁.step ctx with
     | r@(_, .val $ .error _) => r
-    | (ctx, .val _)          => (ctx, .thk p₂) -- discarding value of p₁
+    | (ctx, .val _)          => p₂.step ctx -- discarding value of p₁
     | (ctx, .thk p₁)         => (ctx, .thk $ seq p₁ p₂)
 
   | decl n p    => match p.step ctx with
@@ -82,30 +82,30 @@ def Program.step (ctx : Context) : Program → Context × Result
     | (_, .val v)            => (ctx.insert n v, .val .nil)
     | (_, .thk p)            => (ctx, .thk $ decl n p)
 
-  | loop p@(fail _) _ => (ctx, .thk $ p)
-  | loop (eval e) p   => match ctx.reduce e with
+  | lp@(loop (eval e) p) => match ctx.reduce e with
     | .val $ er@(.error _)  => (ctx, .val er)
     | .val $ .lit $ .bool b =>
-      if b then (ctx, .thk (loop (eval e) p)) else (ctx, .val .nil)
+      if b then match p.step ctx with
+        | er@(_, .val $ .error _) => er
+        | (ctx, .val _)           => (ctx, .thk lp)
+        | (ctx, .thk p')          => (ctx, .thk $ seq p' lp)
+      else (ctx, .val .nil)
     | .val v                => (ctx, .val (.error (cantEvalAsBool v)))
-    | .thk p?               => (ctx, .thk $ loop p? p)
-  | loop p? p         =>
-    match p?.step ctx with
+    | .thk p?               => (ctx, .thk $ fork p? lp skip)
+  | lp@(loop p? p)        => match p?.step ctx with
     | (_, .val $ .error m)       => (ctx, .thk $ .fail m)
     | (_, .val $ .lit $ .bool b) =>
-      if b then (ctx, .thk (loop p? p)) else (ctx, .val .nil)
+      if b then (ctx, .thk lp) else (ctx, .val .nil)
     | (_, .val v)                => (ctx, .val (.error (cantEvalAsBool v)))
-    | (_, .thk p?)               => (ctx, .thk $ loop p? p)
+    | (_, .thk p?')              => (ctx, .thk $ fork p?' lp skip)
 
-  | fork p@(fail _) .. => (ctx, .thk $ p)
   | fork (eval e) p q  => match ctx.reduce e with
     | .val $ er@(.error _)  => (ctx, .val er)
     | .val $ .lit $ .bool b => if b then p.step ctx else q.step ctx
-    | .val $ v              => (ctx, .val (.error (cantEvalAsBool v)))
+    | .val v                => (ctx, .val (.error (cantEvalAsBool v)))
     | .thk p?               => (ctx, .thk $ fork p? p q)
-  | fork p? p q        =>
-    match p?.step ctx with
-    | (_, .val $ .error m)       => (ctx, .thk $ .fail m)
+  | fork p? p q        => match p?.step ctx with
+    | (_, .val $ .error m)       => (ctx, .val $ .error m)
     | (_, .val $ .lit $ .bool b) => if b then p.step ctx else q.step ctx
     | (_, .val v)                => (ctx, .val (.error (cantEvalAsBool v)))
     | (_, .thk p?)               => (ctx, .thk $ fork p? p q)
