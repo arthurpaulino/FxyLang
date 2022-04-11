@@ -72,7 +72,7 @@ partial def elabProgram : Syntax → TermElabM Expr
       ]
   | `(program| if $p?:programSeq then $p:programSeq $[else $q:programSeq]?) =>do
     let q ← match q with
-    | none   => return mkConst ``Program.skip
+    | none   => pure $ mkConst ``Program.skip
     | some q => elabProgram q
     mkAppM ``Program.fork
       #[← elabProgram p?, ← elabProgram p, q]
@@ -110,41 +110,41 @@ b x := 2 * x
 (b 1) > (a 1)
 <<.run
 
-#eval >
+#eval >>
 a := 0
 while a < 5 do
   a := a + 1
 <<.run
 
 #eval >>
-  if 1 < 0 then
-    a := 1
-  else
-    a := 4
+if 1 < 0 then
+  a := 1
+else
+  a := 4
 <<.run
 
 #eval >>
-  if true * false then
-    a := 1
-  else
-    a := 4
+if true * false then
+  a := 1
+else
+  a := 4
 <<.run
 
 #eval >>
-  if true * (false) then
-    a := 1
-  else
-    a := 4
+if true * (false) then
+  a := 1
+else
+  a := 4
 <<.run
 
 #eval >>
-  if (true * (false)) then
-    a := 1
-  else
-    a := 4
+if (true * (false)) then
+  a := 1
+else
+  a := 4
 <<.run
 
-#eval >>
+#eval >> -- why is it ignoring `q`?
 a := 1
 
 f x :=
@@ -152,14 +152,14 @@ f x :=
   x
 
 q := f 5
-<<.run
+<<
 
 #eval >>
 x x := x
 x 4
 <<.run
 
-#eval > -- this is looping infinitely
+#eval >>
 f n :=
   s := 0
   i := 0

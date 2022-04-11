@@ -285,3 +285,5 @@ def Program.toString (p : Program) : String :=
     | .binOp .gt  l r => s!"({aux 0 l} > {aux 0 r})"
     | .binOp .ge  l r => s!"({aux 0 l} >= {aux 0 r})"
   aux 0 p
+
+instance : ToString Program := ⟨Program.toString⟩
