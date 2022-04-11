@@ -5,7 +5,7 @@
 -/
 
 import Lean
-import FxyLang.ASTExecution
+import FxyLang.Execution
 import FxyLang.Syntax
 
 open Lean Elab Meta
@@ -25,8 +25,6 @@ def elabStringOfIdent (id : Syntax) : Expr :=
 
 partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| $v:literal) => do mkAppM ``Expression.lit #[← elabLiteral v]
-  | `(expression| ! $e:expression) => do
-    mkAppM ``Expression.not #[← elabExpression e]
   | `(expression| $n:ident) => mkAppM ``Expression.var #[elabStringOfIdent n]
   | `(expression| $n:ident $[$es:expression]*) => do
     match ← es.data.mapM elabExpression with
@@ -35,23 +33,18 @@ partial def elabExpression : Syntax → TermElabM Expr
       let l  ← mkListLit (Lean.mkConst ``Expression) es
       let nl ← mkAppM ``List.toNEList #[e, l]
       mkAppM ``Expression.app #[elabStringOfIdent n, nl]
-  | `(expression| $l:expression + $r:expression) => do
-    mkAppM ``Expression.add #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression * $r:expression) => do
-    mkAppM ``Expression.mul #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression = $r:expression) => do
-    mkAppM ``Expression.eq #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression != $r:expression) => do
-    mkAppM ``Expression.ne #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression < $r:expression) => do
-    mkAppM ``Expression.lt #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression <= $r:expression) => do
-    mkAppM ``Expression.le #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression > $r:expression) => do
-    mkAppM ``Expression.gt #[← elabExpression l, ← elabExpression r]
-  | `(expression| $l:expression >= $r:expression) => do
-    mkAppM ``Expression.ge #[← elabExpression l, ← elabExpression r]
   | `(expression| ($e:expression)) => elabExpression e
+  | _ => throwUnsupportedSyntax
+
+def elabBinOp : Syntax → TermElabM Expr
+  | `(binop| +) =>  return mkConst ``BinOp.add
+  | `(binop| *) =>  return mkConst ``BinOp.mul
+  | `(binop| <) =>  return mkConst ``BinOp.lt
+  | `(binop| <=) => return mkConst ``BinOp.le
+  | `(binop| >) =>  return mkConst ``BinOp.gt
+  | `(binop| >=) => return mkConst ``BinOp.ge
+  | `(binop| =) =>  return mkConst ``BinOp.eq
+  | `(binop| !=) => return mkConst ``BinOp.ne
   | _ => throwUnsupportedSyntax
 
 partial def elabProgram : Syntax → TermElabM Expr
@@ -77,17 +70,22 @@ partial def elabProgram : Syntax → TermElabM Expr
           mkApp' ``Expression.lam $
             ← mkAppM ``Lambda.mk #[nl, h, ← elabProgram p]
       ]
-  | `(program| if $p?:programSeq then $p:programSeq $[else $q:programSeq]?) =>do
+  | `(program| if $p?:program then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
-    | none   => pure $ mkConst ``Program.skip
+    | none   => return mkConst ``Program.skip
     | some q => elabProgram q
     mkAppM ``Program.fork
       #[← elabProgram p?, ← elabProgram p, q]
-  | `(program| while $p?:programSeq do $p:programSeq) => do
+  | `(program| while $p?:program do $p:programSeq) => do
     mkAppM ``Program.loop #[← elabProgram p?, ← elabProgram p]
   | `(program| $e:expression) => do
     mkAppM ``Program.eval #[← elabExpression e]
+  | `(program| ! $p:programSeq) => do
+    mkAppM ``Program.unOp #[mkConst ``UnOp.not, ← elabProgram p]
+  | `(program| $pₗ:program $o:binop $pᵣ:program) => do
+    mkAppM ``Program.binOp #[← elabBinOp o, ← elabProgram pₗ, ← elabProgram pᵣ]
   | `(program| ($p:programSeq)) => elabProgram p
+  | `(program| ($p:program)) => elabProgram p
   | _ => throwUnsupportedSyntax
 
 ------- ↓↓ testing area ↓↓
@@ -104,9 +102,12 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
 
 #eval >>
+a := 1 + 1
+<<.run
+
+#eval >>
 a x := x
 b x := 2 * x
--- if b 1 > a 1 then c := 3
 (b 1) > (a 1)
 <<.run
 
@@ -114,10 +115,17 @@ b x := 2 * x
 a := 0
 while a do
   a := a + 1
-<<
+<<.run
 
 #eval >>
   if 1 < 0 then
+    a := 1
+  else
+    a := 4
+<<.run
+
+#eval >>
+  if true * false then
     a := 1
   else
     a := 4
@@ -152,7 +160,7 @@ x x := x
 x 4
 <<.run
 
-#eval >
+#eval > -- this is looping infinitely
 f n :=
   s := 0
   i := 0

@@ -27,17 +27,8 @@ mutual
   inductive Expression
     | lit  : Literal → Expression
     | var  : String → Expression
-    | list : List Literal → Expression
-    -- | not  : Expression → Expression
-    -- | add  : Expression → Expression → Expression
-    -- | mul  : Expression → Expression → Expression
-    -- | eq   : Expression → Expression → Expression
-    -- | ne   : Expression → Expression → Expression
-    -- | lt   : Expression → Expression → Expression
-    -- | le   : Expression → Expression → Expression
-    -- | gt   : Expression → Expression → Expression
-    -- | ge   : Expression → Expression → Expression
     | lam  : Lambda → Expression
+    | list : List Literal → Expression
     | app  : String → NEList Expression → Expression
 
   inductive Program
@@ -48,8 +39,8 @@ mutual
     | seq   : Program → Program → Program
     | loop  : Program → Program → Program
     | fork  : Program → Program → Program → Program
-    | binop : Binop → Program → Program → Program
-    | unop  : UnOp  → Program → Program
+    | binOp : BinOp → Program → Program → Program
+    | unOp  : UnOp  → Program → Program
 
   inductive Value
     | nil   : Value
@@ -57,8 +48,6 @@ mutual
     | list  : List Literal → Value
     | error : String → Value
     | lam   : Lambda → Value
-    -- | thunk : Program → Value
-    | inv   : Value
     deriving Inhabited
 
 end

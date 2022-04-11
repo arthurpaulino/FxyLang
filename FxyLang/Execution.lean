@@ -5,7 +5,7 @@
 -/
 
 import Std
-import FxyLang.ASTFunctions
+import FxyLang.Utilities
 
 def cantEvalAsBool (v : Value) : String :=
   s!"can't evaluate {v} as bool. expression has type {v.typeStr}"
@@ -56,27 +56,21 @@ def Context.reduce (ctx : Context) : Expression → Result
       | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
       | (none,   p) => .thk p
     | _        => .val $ .error s!"'{n}' is not an uncurried function"
-  -- | .not   e  => match ctx.reduce e with
-  --   | .lit $ .bool b => .lit $ .bool !b
-  --   | .thunk p       => .thunk $ .unop .not p
-  --   | v              => .error $ cantEvalAsBool v
-  -- | .add eL eR => (ctx.reduce eL).add $ ctx.reduce eR
-  -- | .mul eL eR => (ctx.reduce eL).mul $ ctx.reduce eR
-  -- | .eq  eL eR => (ctx.reduce eL).eq  $ ctx.reduce eR
-  -- | .ne  eL eR => (ctx.reduce eL).ne  $ ctx.reduce eR
-  -- | .lt  eL eR => (ctx.reduce eL).lt  $ ctx.reduce eR
-  -- | .le  eL eR => (ctx.reduce eL).le  $ ctx.reduce eR
-  -- | .gt  eL eR => (ctx.reduce eL).gt  $ ctx.reduce eR
-  -- | .ge  eL eR => (ctx.reduce eL).ge  $ ctx.reduce eR
 
 def Program.step (ctx : Context) : Program → Context × Result
   | skip   => (ctx, .val .nil)
   | fail m => (ctx, .val $ .error m)
   | eval e => (ctx, ctx.reduce e)
 
-  | unop o p => sorry
+  | unOp o p => match p.step ctx with
+    | (_, .val v) => (ctx, .val $ v.unOp o)
+    | (_, .thk p) => (ctx, .thk $ unOp o p)
 
-  | binop o pₗ pᵣ => sorry
+  | binOp o pₗ pᵣ => match (pₗ.step ctx, pᵣ.step ctx) with
+    | ((_, .val vₗ), (_, .val vᵣ)) => (ctx, .val $ vₗ.binOp vᵣ o)
+    | ((_, .thk t),  (_, .val v))  => (ctx, .thk $ binOp o t v.toProgram)
+    | ((_, .val v),  (_, .thk t))  => (ctx, .thk $ binOp o v.toProgram t)
+    | ((_, .thk tₗ), (_, .thk tᵣ)) => (ctx, .thk $ binOp o tₗ tᵣ)
 
   | seq p₁ p₂ => match p₁.step ctx with
     | r@(_, .val $ .error _) => r
@@ -101,7 +95,7 @@ def Program.step (ctx : Context) : Program → Context × Result
     | (_, .val $ .lit $ .bool b) =>
       if b then (ctx, .thk (loop p? p)) else (ctx, .val .nil)
     | (_, .val v)                => (ctx, .val (.error (cantEvalAsBool v)))
-    | (_, .thk $ p?)             => (ctx, .thk $ loop p? p)
+    | (_, .thk p?)               => (ctx, .thk $ loop p? p)
 
   | fork p@(fail _) .. => (ctx, .thk $ p)
   | fork (eval e) p q  => match ctx.reduce e with
@@ -114,7 +108,7 @@ def Program.step (ctx : Context) : Program → Context × Result
     | (_, .val $ .error m)       => (ctx, .thk $ .fail m)
     | (_, .val $ .lit $ .bool b) => if b then p.step ctx else q.step ctx
     | (_, .val v)                => (ctx, .val (.error (cantEvalAsBool v)))
-    | (_, .thk $ p?)            => (ctx, .thk $ fork p? p q)
+    | (_, .thk p?)               => (ctx, .thk $ fork p? p q)
 
 partial def Program.run (p : Program) (ctx : Context := default) :
     Context × Value :=

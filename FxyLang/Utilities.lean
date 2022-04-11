@@ -24,14 +24,11 @@ def Lambda.toString (l : Lambda) : String :=
   "«function»"
 
 protected def Value.toString : Value → String
-  | nil     => "nil"
+  | nil     => "«nil»"
   | lit  l  => l.toString
   | list l  => toString $ l.map Literal.toString
   | lam  l  => l.toString
-  -- | thunk _ => "«thunk»"
   | error s => s!"error: {s}"
-  | inv     => "«invalid»"
-
 
 def Lambda.typeStr : Lambda → String
   | mk l .. => (l.foldl (init := "") fun acc _ => acc ++ "_ → ") ++ "thunk"
@@ -42,8 +39,6 @@ def Value.typeStr : Value → String
   | error _ => "error"
   | list  _ => "list"
   | lam   l => l.typeStr
-  -- | thunk _ => "thunk"
-  | inv     => "invalid"
 
 mutual
 
@@ -56,15 +51,6 @@ mutual
     | list l    => toString $ l.map Literal.toString
     | lam  l    => l.toString
     | app  n es => s!"({n} {unfoldExpressions es})"
-    -- | .not e    => s!"(! {Expression.toString e})"
-    -- | add  l r  => s!"({Expression.toString l} + {Expression.toString r})"
-    -- | mul  l r  => s!"({Expression.toString l} * {Expression.toString r})"
-    -- | eq   l r  => s!"({Expression.toString l} = {Expression.toString r})"
-    -- | ne   l r  => s!"({Expression.toString l} != {Expression.toString r})"
-    -- | lt   l r  => s!"({Expression.toString l} < {Expression.toString r})"
-    -- | le   l r  => s!"({Expression.toString l} <= {Expression.toString r})"
-    -- | gt   l r  => s!"({Expression.toString l} > {Expression.toString r})"
-    -- | ge   l r  => s!"({Expression.toString l} >= {Expression.toString r})"
 
 end
 
@@ -138,9 +124,9 @@ def Literal.eq : Literal → Literal → Literal
   | _       , _        => bool false
 
 def Literal.isEq (l r : Literal) : Bool :=
-  match l.eq r with
+  match h : l.eq r with
   | .bool b => b
-  | _       => unreachable! --todo: eliminate this option with some proof
+  | x       => unreachable! --todo: eliminate this option with some proof
 
 def listLiteralEq : List Literal → List Literal → Bool
   | [], [] => true
@@ -151,15 +137,23 @@ def listLiteralEq : List Literal → List Literal → Bool
 def appError (app l r : String) : String :=
   s!"invalid application of '{app}' between '{l}' and '{r}'"
 
+def appError' (app v : String) : String :=
+  s!"invalid application of '{app}' on '{v}'"
+
+def Value.not : Value → Value
+  | er@(error _)  => er
+  | lit $ .bool b => lit $ .bool !b
+  | v             => error $ appError' "!" v.typeStr
+
 def Value.add : Value → Value → Value
-  | error s,  _        => error s
-  | _      ,  error s  => error s
-  | lit   lₗ, lit lᵣ   => match lₗ.add lᵣ with
+  | er@(error _),  _        => er
+  | _      ,  er@(error _)  => er
+  | lit  lₗ, lit lᵣ   => match lₗ.add lᵣ with
     | .inv => error $ appError "+" lₗ.typeStr lᵣ.typeStr
     | l    => lit l
-  | list  lL, list  lR => list  $ lL ++ lR
-  | list  lL, lit r    => list  $ lL.concat r
-  | l,        r        => error $ appError "+" l.typeStr r.typeStr
+  | list lₗ, list  lᵣ => list  $ lₗ ++ lᵣ
+  | list l,  lit r    => list  $ l.concat r
+  | l,        r       => error $ appError "+" l.typeStr r.typeStr
 
 def Value.mul : Value → Value → Value
   | error s,  _        => error s
@@ -173,9 +167,8 @@ def Value.lt : Value → Value → Value
   | error s,  _       => error s
   | _,        error s => error s
   | lit  lₗ, lit lᵣ   => match lₗ.lt lᵣ with
-    | .inv    => error $ appError "<" lₗ.typeStr lᵣ.typeStr
     | .bool b => lit $ .bool b
-    | _       => inv
+    | _       => error $ appError "<" lₗ.typeStr lᵣ.typeStr
   | list lₗ, list  lᵣ => lit $ .bool $ lₗ.length < lᵣ.length
   | l,         r      => error $ appError "<" l.typeStr r.typeStr
 
@@ -183,9 +176,8 @@ def Value.le : Value → Value → Value
   | error s,  _       => error s
   | _,        error s => error s
   | lit  lₗ, lit lᵣ   => match lₗ.le lᵣ with
-    | .inv    => error $ appError "<=" lₗ.typeStr lᵣ.typeStr
     | .bool b => lit $ .bool b
-    | _       => inv
+    | _       => error $ appError "<=" lₗ.typeStr lᵣ.typeStr
   | list lₗ, list  lᵣ => lit $ .bool $ lₗ.length ≤ lᵣ.length
   | l,         r      => error $ appError "<=" l.typeStr r.typeStr
 
@@ -193,9 +185,8 @@ def Value.gt : Value → Value → Value
   | error s,  _       => error s
   | _,        error s => error s
   | lit  lₗ, lit lᵣ   => match lₗ.gt lᵣ with
-    | .inv    => error $ appError ">" lₗ.typeStr lᵣ.typeStr
     | .bool b => lit $ .bool b
-    | _       => inv
+    | _       => error $ appError ">" lₗ.typeStr lᵣ.typeStr
   | list lₗ, list  lᵣ => lit $ .bool $ lₗ.length > lᵣ.length
   | l,         r      => error $ appError ">" l.typeStr r.typeStr
 
@@ -203,9 +194,8 @@ def Value.ge : Value → Value → Value
   | error s,  _       => error s
   | _,        error s => error s
   | lit  lₗ, lit lᵣ   => match lₗ.ge lᵣ with
-    | .inv    => error $ appError ">=" lₗ.typeStr lᵣ.typeStr
     | .bool b => lit $ .bool b
-    | _       => inv
+    | _       => error $ appError ">=" lₗ.typeStr lᵣ.typeStr
   | list lₗ, list  lᵣ => lit $ .bool $ lₗ.length ≥ lᵣ.length
   | l,         r      => error $ appError ">=" l.typeStr r.typeStr
 
@@ -215,9 +205,9 @@ def Value.eq : Value → Value → Value
   | nil,     nil      => lit $ .bool true
   | lit  lₗ, lit lᵣ   => match lₗ.eq lᵣ with
     | .bool b => lit $ .bool b
-    | _       => inv --todo: eliminate this option with some proof
+    | _       => unreachable! --todo: eliminate this option with some proof
   | list lₗ, list  lᵣ => lit $ .bool (listLiteralEq lₗ lᵣ)
-  | lam .. , lam ..   => error "can't compare functions"
+  | lam .. , lam ..   => error "can't compare functions" --todo
   | _,       _        => lit $ .bool false
 
 def Value.ne : Value → Value → Value
@@ -226,10 +216,30 @@ def Value.ne : Value → Value → Value
   | nil,     nil      => lit $ .bool false
   | lit  lₗ, lit lᵣ   => match lₗ.eq lᵣ with
     | .bool b => lit $ .bool !b
-    | _       => inv --todo: eliminate this option with some proof
+    | _       => unreachable! --todo: eliminate this option with some proof
   | list lₗ, list  lᵣ => lit $ .bool !(listLiteralEq lₗ lᵣ)
-  | lam ..,  lam ..   => error "can't compare functions"
+  | lam ..,  lam ..   => error "can't compare functions" -- todo
   | _,       _        => lit $ .bool false
+
+def Value.unOp : Value → UnOp → Value
+  | v, .not => v.not
+
+def Value.binOp : Value → Value → BinOp → Value
+  | l, r, .add => l.add r
+  | l, r, .mul => l.mul r
+  | l, r, .lt  => l.lt r
+  | l, r, .le  => l.le r
+  | l, r, .gt  => l.gt r
+  | l, r, .ge  => l.ge r
+  | l, r, .eq  => l.eq r
+  | l, r, .ne  => l.ne r
+
+def Value.toProgram : Value → Program
+  | nil     => .skip
+  | lit   l => .eval $ .lit l
+  | list  l => .eval $ .list l
+  | error m => .fail m
+  | lam   l => .eval $ .lam l
 
 def Program.getCurryNames? : Program → Option (NEList String)
   | eval (.app _ ns )                  => none
@@ -246,23 +256,32 @@ def blank (n : Nat) : String :=
     | n + 1 => ' ' :: ' ' :: (blankAux cs n)
   ⟨blankAux [] n⟩
 
--- def Program.toString (p : Program) : String :=
---   let rec progToStringAux (l : Nat) : Program → String
---     | skip              => s!"{blank l}skip"
---     | seq    p q   =>
---       s!"{blank (l-2)}{progToStringAux l p}\n{progToStringAux l q}"
---     | decl n p   =>
---       let pString := if p.isSequence
---         then s!"\n{progToStringAux (l+2) p}"
---         else s!" {progToStringAux (l-2) p}"
---       match p.getCurryNames? with
---       | none    => s!"{blank l}{n} :=" ++ pString
---       | some ns => s!"{blank l}{n} {ns.unfoldStrings} :=" ++ pString
---     | eval  e     => s!"{blank l}{e}"
---     | loop  p? p   =>
---       s!"{blank l}while {p?.toString} do\n{progToStringAux (l+2) p}"
---     | fork      p? p q =>
---       s!"{blank l}if {p?.toString} then\n{progToStringAux (l+2) p}\n" ++
---         s!"else\n{progToStringAux (l+2) q}"
---     | fail s            => s!"raise {s}"
---   progToStringAux 0 p
+def Program.toString (p : Program) : String :=
+  let rec aux (l : Nat) : Program → String
+    | skip              => s!"{blank l}skip"
+    | seq    p q   =>
+      s!"{blank (l-2)}{aux l p}\n{aux l q}"
+    | decl n p   =>
+      let pString := if p.isSequence
+        then s!"\n{aux (l+2) p}"
+        else s!" {aux (l-2) p}"
+      match p.getCurryNames? with
+      | none    => s!"{blank l}{n} :=" ++ pString
+      | some ns => s!"{blank l}{n} {ns.unfoldStrings} :=" ++ pString
+    | eval  e     => s!"{blank l}{e}"
+    | loop  p? p   =>
+      s!"{blank l}while {p?.toString} do\n{aux (l+2) p}"
+    | fork      p? p q =>
+      s!"{blank l}if {p?.toString} then\n{aux (l+2) p}\n" ++
+        s!"else\n{aux (l+2) q}"
+    | fail s          => s!"raise {s}"
+    | .unOp .not p    => s!"(! {aux 0 p})"
+    | .binOp .add l r => s!"({aux 0 l} + {aux 0 r})"
+    | .binOp .mul l r => s!"({aux 0 l} * {aux 0 r})"
+    | .binOp .eq  l r => s!"({aux 0 l} = {aux 0 r})"
+    | .binOp .ne  l r => s!"({aux 0 l} != {aux 0 r})"
+    | .binOp .lt  l r => s!"({aux 0 l} < {aux 0 r})"
+    | .binOp .le  l r => s!"({aux 0 l} <= {aux 0 r})"
+    | .binOp .gt  l r => s!"({aux 0 l} > {aux 0 r})"
+    | .binOp .ge  l r => s!"({aux 0 l} >= {aux 0 r})"
+  aux 0 p
