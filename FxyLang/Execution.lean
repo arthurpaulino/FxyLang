@@ -51,140 +51,79 @@ instance : ToString Result := ⟨Result.toString⟩
 
 mutual
 
-  partial def reduce (ctx : Context) : Expression → Result
-    | .lit l => .val $ .lit l
-    | .list l => .val $ .list l
-    | .lam l => .val $ .lam l
-    | .var n => match ctx[n] with
+  partial def reduceP (ctx : Context) : Expression → Result
+    | .lit  l   => .val $ .lit l
+    | .list l   => .val $ .list l
+    | .lam  l   => .val $ .lam l
+    | .var  n   => match ctx[n] with
       | none   => .err $ notFound n
       | some v => .val $ v
     | .app n es => match ctx[n] with
-      | none                => .err $ notFound n
+      | none                     => .err $ notFound n
       | some (.lam $ .mk ns h p) =>
         match h' : consume p ns es with
         | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
-        | (none,   p) => (p.run ctx).2
-      | _        => .err $ s!"'{n}' is not an uncurried function"
-    | .unOp o e => match reduce ctx e with
-      | .val v => match v.unOp o with
-        | .ok v => .val v
+        | (none,   p) => (p.runP ctx).2
+      | _ => .err $ s!"'{n}' is not an uncurried function"
+    | .unOp o e => match reduceP ctx e with
+      | .val v      => match v.unOp o with
+        | .ok    v => .val v
         | .error m => .err m
       | er@(.err m) => er
-    | .binOp o eₗ eᵣ => match (reduce ctx eₗ, reduce ctx eᵣ) with
+    | .binOp o eₗ eᵣ => match (reduceP ctx eₗ, reduceP ctx eᵣ) with
       | (.val vₗ, .val vᵣ) => match vₗ.binOp vᵣ o with
-        | .ok v => .val v
+        | .ok    v => .val v
         | .error m => .err m
-      | (.err m, .val _) => .err m
-      | (.val _, .err m) => .err m
+      | (.err m, .val _)   => .err m
+      | (.val _, .err m)   => .err m
       | (.err mₗ, .err mᵣ) => .err s!"{mₗ}\n{mᵣ}"
 
-  partial def Program.run (ctx : Context := default) :
+  partial def Program.runP (ctx : Context := default) :
       Program → Context × Result
-    | skip           => (ctx, .val .nil)
+    | skip      => (ctx, .val .nil)
     | seq p₁ p₂ =>
-      let res := p₁.run ctx
+      let res := p₁.runP ctx
       match res.2 with
       | .err _ => res
-      | _      => p₂.run res.1
-    | decl n p => match (p.run ctx).2 with
+      | _      => p₂.runP res.1
+    | decl n p => match (p.runP ctx).2 with
       | .err s => (ctx, .err s)
       | .val v => (ctx.insert n v, .val .nil)
-    | fork e pT pF => match reduce ctx e with
-      | .val $ .lit $ .bool b => if b then pT.run ctx else pF.run ctx
+    | fork e pT pF => match reduceP ctx e with
+      | .val $ .lit $ .bool b => if b then pT.runP ctx else pF.runP ctx
       | .val v                => (ctx, .err $ cantEvalAsBool v)
       | .err m                => (ctx, .err m)
-    | loop e p  => match reduce ctx e with
+    | loop e p  => match reduceP ctx e with
       | .val $ .lit $ .bool b =>
         if !b then (ctx, .val .nil) else
-          match p.run ctx with
+          match p.runP ctx with
           | er@(_, .err _) => er
-          | (ctx, _)       => (loop e p).run ctx
-      | .val v                => (ctx, .err $ cantEvalAsBool v)
-      | er@(.err _)                => (ctx, er)
-    | eval e   => (ctx, (reduce ctx e))
-    | fail s         => (ctx, .err s)
+          | (ctx, _)       => (loop e p).runP ctx
+      | .val v      => (ctx, .err $ cantEvalAsBool v)
+      | er@(.err _) => (ctx, er)
+    | eval e => (ctx, (reduceP ctx e))
+    | fail s => (ctx, .err s)
 
 end
 
--- inductive Result
---   | thk : Program → Result
---   | val : Value   → Result
+inductive Continuation
+  | exit : Continuation
+  | seq : Program → Continuation → Continuation
+  | decl : Context → String → Continuation → Continuation
+  | fork : Program → Program → Continuation → Continuation
+  | lam : Context → Continuation → Continuation
 
--- def Context.reduce (ctx : Context) : Expression → Result
---   | .lit l    => .val $ .lit l
---   | .lam l    => .val $ .lam l
---   | .var n    => .val $ match ctx[n] with
---     | none   => .error $ notFound n
---     | some v => v
---   | .list  l  => .val $ .list l
---   | .app n es => match ctx[n] with
---     | none                     => .val $ .error $ notFound n
---     | some (.lam $ .mk ns h p) =>
---       match h' : consume p ns es with
---       | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
---       | (none,   p) => .thk p
---     | _        => .val $ .error s!"'{n}' is not an uncurried function"
---   | .unOp o e => match ctx.reduce e with
---     | .val v => sorry --.val $ v.unOp o
---     | .thk p => sorry --.thk $ unOp o p
+inductive State
+  | ret : Context → Value → Continuation → State
+  | prog : Context → Program → Continuation → State
+  | expr : Context → Expression → Continuation → State
+  | error : String → State
+  | done : Value → State
 
-  -- | binOp o pₗ pᵣ => match (pₗ.step ctx, pᵣ.step ctx) with
-  --   | ((_, .val vₗ), (_, .val vᵣ)) => (ctx, .val $ vₗ.binOp vᵣ o)
-  --   | ((_, .thk t),  (_, .val v))  => (ctx, .thk $ binOp o t v.toProgram)
-  --   | ((_, .val v),  (_, .thk t))  => (ctx, .thk $ binOp o v.toProgram t)
-  --   | ((_, .thk tₗ), (_, .thk tᵣ)) => (ctx, .thk $ binOp o tₗ tᵣ)
-
--- def Program.step (ctx : Context) : Program → Context × Result
---   | skip   => (ctx, .val .nil)
---   | fail m => (ctx, .val $ .error m)
---   | eval e => (ctx, ctx.reduce e)
-
-
---   | seq p₁ p₂ => match p₁.step ctx with
---     | r@(_, .val $ .error _) => r
---     | (ctx, .val _)          => p₂.step ctx -- discarding value of p₁
---     | (ctx, .thk p₁)         => (ctx, .thk $ seq p₁ p₂)
-
---   | decl n p => match p.step ctx with
---     | (_, er@(.val $ .error _)) => (ctx, er)
---     | (_, .val v)               => (ctx.insert n v, .val .nil)
---     | (ctx', .thk p')           => (ctx', .thk $ decl n p')
-
---   | fork e p q => match ctx.reduce e with
---     | .val $ .error m       => (ctx, .val $ .error m)
---     | .val $ .lit $ .bool b => if b then p.step ctx else q.step ctx
---     | .val v                => (ctx, .val (.error (cantEvalAsBool v)))
---     | .thk p?               => (ctx, .thk $ fork p? p q)
-
---   | lp@(loop e p) => (ctx, .thk $ fork e (seq p lp) skip)
-
--- partial def Program.run (p : Program) (ctx : Context := default) :
---     Context × Value :=
---   -- dbg_trace ctx
---   -- dbg_trace "--------------"
---   -- dbg_trace p
---   -- dbg_trace "=============="
---   match p.step ctx with
---   | (ctx, .thk p) => p.run ctx
---   | (ctx, .val v) => (ctx, v)
-
--- inductive Continuation
---   | exit : Continuation
---   | seq : Program → Continuation → Continuation
---   | decl : Context → String → Continuation → Continuation
---   | fork : Program → Program → Continuation → Continuation
-
--- inductive State
---   | ret : Context → Value → Continuation → State
---   | prog : Context → Program → Continuation → State
---   | expr : Context → Expression → Continuation → State
---   | error : String → State
---   | done : Value → State
-
--- inductive Reduction
---   | val : Value   → Reduction
---   | err : String  → Reduction
---   | thk : Context → Program → Reduction
+inductive Reduction
+  | val : Value   → Reduction
+  | err : String  → Reduction
+  | thk : Program → Reduction
 
 -- def Context.reduce (ctx : Context) : Expression → Reduction
 --   | .lit l    => .val $ .lit l
@@ -198,7 +137,7 @@ end
 --     | some (.lam $ .mk ns h p) =>
 --       match h' : consume p ns es with
 --       | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
---       | (none,   p) => .thk ctx p
+--       | (none,   p) => .thk p
 --     | _        => .err s!"'{n}' is not an uncurried function"
 --   | .unOp o e => match ctx.reduce e with
 --     | .val v => match v.unOp o with
@@ -211,45 +150,45 @@ end
 --     | (.val vₗ, .val vᵣ) => match vₗ.binOp vᵣ o with
 --       | .error m => .err m
 --       | .ok    v => .val v
---     | (.thk c t,  .val v)  => sorry
---     | (.val v,  .thk c t)  => sorry
---     | (.thk cₗ tₗ, .thk cᵣ tᵣ) => sorry
+--     | (.thk t,   .val v) => sorry
+--     | (.val v,   .thk t) => sorry
+--     | (.thk tₗ, .thk tᵣ) => sorry
 --     | (.err er, _) => .err er
 --     | (_, .err er) => .err er
 
--- def State.step : State → State
---   | prog ctx .skip k => ret ctx .nil k
---   | prog _ (.fail m) _ => error m
---   | prog ctx (.eval e) k => expr ctx e k
---   | prog ctx (.seq p₁ p₂) k => prog ctx p₁ (.seq p₂ k)
---   | prog ctx (.decl n p) k => prog ctx p (.decl ctx n k)
---   | prog ctx (.fork e pT pF) k => expr ctx e (.fork pT pF k)
---   | prog ctx lp@(.loop e p) k => expr ctx e (.fork (.seq p lp) .skip k)
---   | ret ctx _ (.seq p k) => prog ctx p k
---   | ret ctx (.lit $ .bool true) (.fork pT _ k) => prog ctx pT k
---   | ret ctx (.lit $ .bool false) (.fork _ pF k) => prog ctx pF k
---   | ret _ v (.fork ..) => error s!"'{v}', of type {v.typeStr}, is not a bool"
---   | ret _ v (.decl ctx n k) => ret (ctx.insert n v) .nil k
---   | s@(error _) => s
---   | s@(done _) => s
---   | ret ctx v .exit => done v
---   -- | expr ctx (.lit l) k => ret ctx (.lit l) k
---   -- | expr ctx (.list l) k => ret ctx (.list l) k
---   -- | expr ctx (.var n) k => match ctx[n] with
---   --   | none   => error $ notFound n
---   --   | some v => ret ctx v k
---   -- | expr ctx (.lam l) k => ret ctx (.lam l) k
---   -- | expr ctx (.unOp o e) k => ret ctx (.lam l) k
---   | expr ctx e k => match ctx.reduce e with
---     | .val v => ret ctx v k
---     | .thk ctx p => prog ctx p k
---     | .err m => error m
+def State.step : State → State
+  | prog ctx .skip k => ret ctx .nil k
+  | prog _ (.fail m) _ => error m
+  | prog ctx (.eval e) k => expr ctx e k
+  | prog ctx (.seq p₁ p₂) k => prog ctx p₁ (.seq p₂ k)
+  | prog ctx (.decl n p) k => prog ctx p (.decl ctx n k)
+  | prog ctx (.fork e pT pF) k => expr ctx e (.fork pT pF k)
+  | prog ctx lp@(.loop e p) k => expr ctx e (.fork (.seq p lp) .skip k)
+  | ret ctx _ (.seq p k) => prog ctx p k
+  | ret ctx (.lit $ .bool true) (.fork pT _ k) => prog ctx pT k
+  | ret ctx (.lit $ .bool false) (.fork _ pF k) => prog ctx pF k
+  | ret _ v (.fork ..) => error s!"'{v}', of type {v.typeStr}, is not a bool"
+  | ret _ v (.decl ctx n k) => ret (ctx.insert n v) .nil k
+  | ret ctx v (.lam ctx' k) => sorry
+  | s@(error _) => s
+  | s@(done _) => s
+  | ret ctx v .exit => done v
+  | expr ctx (.lit l) k => ret ctx (.lit l) k
+  | expr ctx (.list l) k => ret ctx (.list l) k
+  | expr ctx (.var n) k => match ctx[n] with
+    | none   => error $ notFound n
+    | some v => ret ctx v k
+  | expr ctx (.lam (.mk _ _ p)) k => prog ctx p (.lam ctx k)
+  | expr ctx (.app n es) k => match ctx[n] with
+    | some (.lam $ .mk ns h p) =>
+      match h' : consume p ns es with
+      | (some l, p) => ret ctx (.lam $ .mk l (noDupOfConsumeNoDup h h') p) k
+      | (none,   p) => prog ctx p k
+    | none => error $ notFound n
+    | _    => error s!"'{n}' is not an uncurried function"
 
--- def initialState (p : Program) : State :=
---   State.prog default p .exit
-
--- partial def Program.run (p : Program) (s : State := initialState p) : State :=
---   match s.step with
---   | s@(.done _) => s
---   | s@(.error _) => s
---   | s       => s.step -- fix
+  -- | expr ctx e k => match ctx.reduce e with
+  --   | .val v => ret ctx v k
+  --   | .thk p => prog ctx p k
+  --   | .err m => error m
+  | _ => sorry
