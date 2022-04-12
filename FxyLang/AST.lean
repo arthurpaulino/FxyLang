@@ -11,7 +11,6 @@ inductive Literal
   | int   : Int    → Literal
   | float : Float  → Literal
   | str   : String → Literal
-  | inv   : Literal
 
 inductive BinOp
   | add | mul | eq | ne | lt | le | gt | ge
@@ -42,11 +41,11 @@ mutual
     | fork  : Expression → Program → Program → Program
     | loop  : Expression → Program → Program
 
-  inductive Value
-    | nil   : Value
-    | lit   : Literal → Value
-    | list  : List Literal → Value
-    | lam   : Lambda → Value
-    deriving Inhabited
-
 end
+
+inductive Value
+  | nil   : Value
+  | lit   : Literal → Value
+  | list  : List Literal → Value
+  | lam   : Lambda → Value
+  deriving Inhabited
