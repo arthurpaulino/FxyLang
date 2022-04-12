@@ -7,8 +7,8 @@
 import Std
 import FxyLang.ASTUtilities
 
-def cantEvalAsBool  (v : Value) : String :=
-  s!"can't evaluate {v} as bool. expression has type {v.typeStr}"
+def cantEvalAsBool (e : Expression) (v : Value) : String :=
+  s!"can't evaluate {v} as bool. expression {e} has type {v.typeStr}"
 
 def notFound (n : String) : String :=
   s!"'{n}' not found"
@@ -91,7 +91,7 @@ mutual
       | .val v => (ctx.insert n v, .val .nil)
     | fork e pT pF => match reduceP ctx e with
       | .val $ .lit $ .bool b => if b then pT.runP ctx else pF.runP ctx
-      | .val v                => (ctx, .err $ cantEvalAsBool v)
+      | .val v                => (ctx, .err $ cantEvalAsBool e v)
       | .err m                => (ctx, .err m)
     | loop e p  => match reduceP ctx e with
       | .val $ .lit $ .bool b =>
@@ -99,7 +99,7 @@ mutual
           match p.runP ctx with
           | er@(_, .err _) => er
           | (ctx, _)       => (loop e p).runP ctx
-      | .val v      => (ctx, .err $ cantEvalAsBool v)
+      | .val v      => (ctx, .err $ cantEvalAsBool e v)
       | er@(.err _) => (ctx, er)
     | eval e => (ctx, (reduceP ctx e))
     | fail s => (ctx, .err s)
@@ -112,6 +112,7 @@ inductive Continuation
   | decl : Context → String → Continuation → Continuation
   | fork : Program → Program → Continuation → Continuation
   | lam : Context → Continuation → Continuation
+  | unOp : UnOp → Expression → Continuation → Continuation
   | binOp1 : BinOp → Expression → Continuation → Continuation
   | binOp2 : BinOp → Value → Continuation → Continuation
 
@@ -121,42 +122,6 @@ inductive State
   | expr : Context → Expression → Continuation → State
   | error : String → State
   | done : Value → State
-
-inductive Reduction
-  | val : Value   → Reduction
-  | err : String  → Reduction
-  | thk : Program → Reduction
-
--- def Context.reduce (ctx : Context) : Expression → Reduction
---   | .lit l    => .val $ .lit l
---   | .lam l    => .val $ .lam l
---   | .var n    => match ctx[n] with
---     | none   => .err $ notFound n
---     | some v => .val v
---   | .list  l  => .val $ .list l
---   | .app n es => match ctx[n] with
---     | none                     => .err $ notFound n
---     | some (.lam $ .mk ns h p) =>
---       match h' : consume p ns es with
---       | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
---       | (none,   p) => .thk p
---     | _        => .err s!"'{n}' is not an uncurried function"
---   | .unOp o e => match ctx.reduce e with
---     | .val v => match v.unOp o with
---       | .error m => .err m
---       | .ok    v => .val v
---     | t@(.thk ..) => t
---     | er@(.err _) => er
-
---   | .binOp o eₗ eᵣ => match (ctx.reduce eₗ, ctx.reduce eᵣ) with
---     | (.val vₗ, .val vᵣ) => match vₗ.binOp vᵣ o with
---       | .error m => .err m
---       | .ok    v => .val v
---     | (.thk t,   .val v) => sorry
---     | (.val v,   .thk t) => sorry
---     | (.thk tₗ, .thk tᵣ) => sorry
---     | (.err er, _) => .err er
---     | (_, .err er) => .err er
 
 def State.step : State → State
   | prog ctx .skip k => ret ctx .nil k
@@ -180,7 +145,7 @@ def State.step : State → State
   | expr ctx (.var n) k => match ctx[n] with
     | none   => error $ notFound n
     | some v => ret ctx v k
-  | expr ctx (.lam (.mk _ _ p)) k => prog ctx p (.lam ctx k)
+  | expr ctx (.lam l@(.mk ..)) k => ret ctx (.lam l) k
   | expr ctx (.app n es) k => match ctx[n] with
     | some (.lam $ .mk ns h p) =>
       match h' : consume p ns es with
@@ -188,13 +153,12 @@ def State.step : State → State
       | (none,   p) => prog ctx p k
     | none => error $ notFound n
     | _    => error s!"'{n}' is not an uncurried function"
+  | expr ctx (.unOp o e) k => expr ctx e (.unOp o e k)
   | expr ctx (.binOp o e1 e2) k => expr ctx e1 (.binOp1 o e2 k)
+  | ret ctx v (.unOp o e k) => match v.unOp o with
+    | .error m => error m
+    | .ok    v => ret ctx v k
   | ret ctx v1 (.binOp1 o e2 k) => expr ctx e2 (.binOp2 o v1 k)
   | ret ctx v2 (.binOp2 o v1 k) => match v1.binOp v2 o with
     | .error m => error m
     | .ok    v => ret ctx v k
-
-  -- | expr ctx e k => match ctx.reduce e with
-  --   | .val v => ret ctx v k
-  --   | .thk p => prog ctx p k
-  --   | .err m => error m
