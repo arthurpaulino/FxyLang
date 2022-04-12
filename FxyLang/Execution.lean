@@ -111,7 +111,6 @@ inductive Continuation
   | seq : Program → Continuation → Continuation
   | decl : Context → String → Continuation → Continuation
   | fork : Program → Program → Continuation → Continuation
-  | lam : Context → Continuation → Continuation
   | unOp : UnOp → Expression → Continuation → Continuation
   | binOp1 : BinOp → Expression → Continuation → Continuation
   | binOp2 : BinOp → Value → Continuation → Continuation
@@ -136,7 +135,6 @@ def State.step : State → State
   | ret ctx (.lit $ .bool false) (.fork _ pF k) => prog ctx pF k
   | ret _ v (.fork ..) => error s!"'{v}', of type {v.typeStr}, is not a bool"
   | ret _ v (.decl ctx n k) => ret (ctx.insert n v) .nil k
-  | ret ctx v (.lam ctx' k) => sorry
   | s@(error _) => s
   | s@(done _) => s
   | ret ctx v .exit => done v
