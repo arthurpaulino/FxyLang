@@ -33,7 +33,7 @@ declare_syntax_cat                      programSeq
 syntax withPosition((colGe program)+) : programSeq
 
 syntax "skip"                                       : program
-syntax withPosition(ident+ " := " colGt programSeq) : program
+syntax withPosition(ident+ colGt " := " programSeq) : program
 syntax expression                                   : program
 syntax withPosition(
   "if " expression colGe " then "

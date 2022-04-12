@@ -30,6 +30,8 @@ mutual
     | lam  : Lambda → Expression
     | list : List Literal → Expression
     | app  : String → NEList Expression → Expression
+    | unOp  : UnOp  → Expression → Expression
+    | binOp : BinOp → Expression → Expression → Expression
 
   inductive Program
     | skip  : Program
@@ -37,16 +39,13 @@ mutual
     | eval  : Expression → Program
     | decl  : String  → Program → Program
     | seq   : Program → Program → Program
-    | fork  : Program → Program → Program → Program
-    | loop  : Program → Program → Program
-    | binOp : BinOp → Program → Program → Program
-    | unOp  : UnOp  → Program → Program
+    | fork  : Expression → Program → Program → Program
+    | loop  : Expression → Program → Program
 
   inductive Value
     | nil   : Value
     | lit   : Literal → Value
     | list  : List Literal → Value
-    | error : String → Value
     | lam   : Lambda → Value
     deriving Inhabited
 

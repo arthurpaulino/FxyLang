@@ -11,18 +11,6 @@ syntax "true"                                  : literal
 syntax "false"                                 : literal
 syntax ("-" noWs)? num noWs "." (noWs num)?    : literal
 
-declare_syntax_cat                       expression
-syntax literal                         : expression
-syntax withPosition(
-  "[ " colGt literal,* " ]")           : expression
-syntax:51 ident                        : expression
-syntax:49 ident (colGt expression:50)+ : expression
-syntax " ( " expression " ) "          : expression
-
-declare_syntax_cat                      program
-declare_syntax_cat                      programSeq
-syntax withPosition((colGe program)+) : programSeq
-
 declare_syntax_cat binop
 syntax " + "     : binop
 syntax " * "     : binop
@@ -33,11 +21,23 @@ syntax " <= "    : binop
 syntax " > "     : binop
 syntax " >= "    : binop
 
+declare_syntax_cat                       expression
+syntax literal                         : expression
+syntax withPosition(
+  "[ " colGt literal,* " ]")           : expression
+syntax:51 ident                        : expression
+syntax:49 ident (colGt expression:50)+ : expression
+syntax " ! " expression                : expression
+syntax expression binop expression     : expression
+syntax " ( " expression " ) "          : expression
+
+declare_syntax_cat                      program
+declare_syntax_cat                      programSeq
+syntax withPosition((colGe program)+) : programSeq
+
 syntax "skip"                                       : program
-syntax withPosition(ident+ " := " colGt programSeq) : program
+syntax withPosition(ident+ colGt " := " programSeq) : program
 syntax expression                                   : program
-syntax " ! " programSeq                             : program
-syntax program binop program                        : program
 syntax withPosition(
   "if " programSeq colGe " then "
     colGt programSeq
@@ -45,4 +45,3 @@ syntax withPosition(
     colGt programSeq)?)                             : program
 syntax withPosition("while " programSeq " do "
   colGt programSeq)                                 : program
-syntax " ( " programSeq " ) "                       : program

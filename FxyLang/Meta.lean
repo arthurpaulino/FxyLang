@@ -23,6 +23,17 @@ def elabLiteral : Syntax → TermElabM Expr
 def elabStringOfIdent (id : Syntax) : Expr :=
   mkStrLit id.getId.toString
 
+def elabBinOp : Syntax → TermElabM Expr
+  | `(binop| +) =>  return mkConst ``BinOp.add
+  | `(binop| *) =>  return mkConst ``BinOp.mul
+  | `(binop| <) =>  return mkConst ``BinOp.lt
+  | `(binop| <=) => return mkConst ``BinOp.le
+  | `(binop| >) =>  return mkConst ``BinOp.gt
+  | `(binop| >=) => return mkConst ``BinOp.ge
+  | `(binop| =) =>  return mkConst ``BinOp.eq
+  | `(binop| !=) => return mkConst ``BinOp.ne
+  | _ => throwUnsupportedSyntax
+
 partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| $v:literal) => do mkAppM ``Expression.lit #[← elabLiteral v]
   | `(expression| $n:ident) => mkAppM ``Expression.var #[elabStringOfIdent n]
@@ -33,18 +44,12 @@ partial def elabExpression : Syntax → TermElabM Expr
       let l  ← mkListLit (Lean.mkConst ``Expression) es
       let nl ← mkAppM ``List.toNEList #[e, l]
       mkAppM ``Expression.app #[elabStringOfIdent n, nl]
+  | `(expression| ! $p:expression) => do
+    mkAppM ``Expression.unOp #[mkConst ``UnOp.not, ← elabExpression p]
+  | `(expression| $eₗ:expression $o:binop $eᵣ:expression) => do
+    mkAppM ``Expression.binOp
+      #[← elabBinOp o, ← elabExpression eₗ, ← elabExpression eᵣ]
   | `(expression| ($e:expression)) => elabExpression e
-  | _ => throwUnsupportedSyntax
-
-def elabBinOp : Syntax → TermElabM Expr
-  | `(binop| +) =>  return mkConst ``BinOp.add
-  | `(binop| *) =>  return mkConst ``BinOp.mul
-  | `(binop| <) =>  return mkConst ``BinOp.lt
-  | `(binop| <=) => return mkConst ``BinOp.le
-  | `(binop| >) =>  return mkConst ``BinOp.gt
-  | `(binop| >=) => return mkConst ``BinOp.ge
-  | `(binop| =) =>  return mkConst ``BinOp.eq
-  | `(binop| !=) => return mkConst ``BinOp.ne
   | _ => throwUnsupportedSyntax
 
 partial def elabProgram : Syntax → TermElabM Expr
@@ -70,21 +75,16 @@ partial def elabProgram : Syntax → TermElabM Expr
           mkApp' ``Expression.lam $
             ← mkAppM ``Lambda.mk #[nl, h, ← elabProgram p]
       ]
-  | `(program| if $p?:programSeq then $p:programSeq $[else $q:programSeq]?) =>do
+  | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
     | none   => pure $ mkConst ``Program.skip
     | some q => elabProgram q
     mkAppM ``Program.fork
-      #[← elabProgram p?, ← elabProgram p, q]
-  | `(program| while $p?:programSeq do $p:programSeq) => do
-    mkAppM ``Program.loop #[← elabProgram p?, ← elabProgram p]
+      #[← elabExpression e, ← elabProgram p, q]
+  | `(program| while $e:expression do $p:programSeq) => do
+    mkAppM ``Program.loop #[← elabExpression e, ← elabProgram p]
   | `(program| $e:expression) => do
     mkAppM ``Program.eval #[← elabExpression e]
-  | `(program| ! $p:programSeq) => do
-    mkAppM ``Program.unOp #[mkConst ``UnOp.not, ← elabProgram p]
-  | `(program| $pₗ:program $o:binop $pᵣ:program) => do
-    mkAppM ``Program.binOp #[← elabBinOp o, ← elabProgram pₗ, ← elabProgram pᵣ]
-  | `(program| ($p:programSeq)) => elabProgram p
   | _ => throwUnsupportedSyntax
 
 ------- ↓↓ testing area ↓↓
@@ -102,7 +102,7 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
 
 #eval >>
 a := 1 + 1
-<<.run
+<<
 
 #eval >>
 a x := x
@@ -135,28 +135,30 @@ if true * (false) then
   a := 1
 else
   a := 4
-<<.run
+<<
 
 #eval >>
 if (true * (false)) then
   a := 1
 else
   a := 4
-<<.run
-
-#eval >> -- why is it ignoring `q`?
-a := 1
-
-f x :=
-  a := 2
-  x
-
-q := f 5
 <<
 
 #eval >>
 x x := x
 x 4
+<<.run
+
+#eval >>
+g x y := x + y
+f x :=
+  a := 1
+  b := 2
+  -- c := g a b -- uncomment this line to see the bug
+  x
+
+q := f 3
+q
 <<.run
 
 #eval >>
@@ -167,12 +169,13 @@ f n :=
     i := i + 1
     s := s + i
   s
-f 5
+x := f 5
+x
 <<.run
 
 def px := >>
-((x := 1)
- (a := 2))
+x := 1
+ a := 2
 <<.toString
 
 def px' := >>
@@ -181,8 +184,8 @@ a := 2
 <<.toString
 
 def px'' := >>
-(x := 1)
-a := 2
+x := 1
+    a := 2
 <<.toString
 
 #assert px = px'
@@ -204,9 +207,9 @@ x := 1
 s := 0
 a := 0
 while a < 5 do
-  ((a := a + 1
-    s := s + a)
-    x := 1)
+  a := a + 1
+    s := s + a
+    x := 1
 s
 <<
 
@@ -245,10 +248,10 @@ min 5 3
 <<.toString
 
 def p2 := >>
-(min x y :=
+min x y :=
   if x < y
     then x
-    else y)
+    else y
 min 5 3
 <<.toString
 
@@ -282,7 +285,7 @@ a < 3
 <<.toString
 
 def p5 := >>
-(while 1 < a do x := 2)
+while 1 < a do x := 2
 a < 3
 <<.toString
 
@@ -290,22 +293,22 @@ a < 3
 #assert p4 = p5
 
 def p6 := >>
-(f x y :=
-  x + y)
-(f3 := f 3)
+f x y :=
+  x + y
+f3 := f 3
 f32 := f3 2
 <<.toString
 
 def p6' := >>
-((f x y := x + y)
- f3 := f 3)
+f x y := x + y
+ f3 := f 3
 f32 := f3 2
 <<.toString
 
 def p7 := >>
-(f x y := x + y)
-(f3 := f 3)
-f32 := f3 2
+f x y := x + y
+  f3 := f 3
+    f32 := f3 2
 <<.toString
 
 def p8 := >>
@@ -326,23 +329,23 @@ a :=
 <<.toString
 
 def p9' := >>
-(a :=
+a :=
   x := 5
-  y = 5)
+  y = 5
 2 + 5
 <<.toString
 
 def p10 := >>
 a :=
-  (x := 5
-   y = 5)
+  x := 5
+   y = 5
 2 + 5
 <<.toString
 
 def p11 := >>
-(a :=
-  ((x := 5)
-   y = 5))
+a :=
+    x := 5
+    y = 5
 2 + 5
 <<.toString
 
