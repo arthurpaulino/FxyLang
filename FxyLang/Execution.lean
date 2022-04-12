@@ -112,6 +112,8 @@ inductive Continuation
   | decl : Context → String → Continuation → Continuation
   | fork : Program → Program → Continuation → Continuation
   | lam : Context → Continuation → Continuation
+  | binOp1 : BinOp → Expression → Continuation → Continuation
+  | binOp2 : BinOp → Value → Continuation → Continuation
 
 inductive State
   | ret : Context → Value → Continuation → State
@@ -186,9 +188,13 @@ def State.step : State → State
       | (none,   p) => prog ctx p k
     | none => error $ notFound n
     | _    => error s!"'{n}' is not an uncurried function"
+  | expr ctx (.binOp o e1 e2) k => expr ctx e1 (.binOp1 o e2 k)
+  | ret ctx v1 (.binOp1 o e2 k) => expr ctx e2 (.binOp2 o v1 k)
+  | ret ctx v2 (.binOp2 o v1 k) => match v1.binOp v2 o with
+    | .error m => error m
+    | .ok    v => ret ctx v k
 
   -- | expr ctx e k => match ctx.reduce e with
   --   | .val v => ret ctx v k
   --   | .thk p => prog ctx p k
   --   | .err m => error m
-  | _ => sorry
