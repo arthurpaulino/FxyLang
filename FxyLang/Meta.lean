@@ -13,24 +13,34 @@ open Lean Elab Meta
 def mkApp' (name : Name) (e : Expr) : Expr :=
   mkApp (mkConst name) e
 
+def negFloat (f : Float) : Float :=
+  -1.0 * f
+
 def elabLiteral : Syntax → TermElabM Expr
   | `(literal| $n:num) =>
     mkAppM ``Literal.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
   | `(literal| true)  => mkAppM ``Literal.bool #[mkConst ``Bool.true]
   | `(literal| false) => mkAppM ``Literal.bool #[mkConst ``Bool.false]
+  | `(literal| $s:str) => mkAppM ``Literal.str #[mkStrLit $ s.isStrLit?.getD ""]
+  | `(literal| $[-%$neg]?$f:scientific) => do
+      if neg.isNone then
+        mkAppM ``Literal.float #[← Term.elabScientificLit f (mkConst ``Float)]
+      else
+        let f ← Term.elabScientificLit f (mkConst ``Float)
+        mkAppM ``Literal.float #[mkApp' ``negFloat f]
   | _ => throwUnsupportedSyntax
 
 def elabStringOfIdent (id : Syntax) : Expr :=
   mkStrLit id.getId.toString
 
 def elabBinOp : Syntax → TermElabM Expr
-  | `(binop| +) =>  return mkConst ``BinOp.add
-  | `(binop| *) =>  return mkConst ``BinOp.mul
-  | `(binop| <) =>  return mkConst ``BinOp.lt
+  | `(binop| +)  => return mkConst ``BinOp.add
+  | `(binop| *)  => return mkConst ``BinOp.mul
+  | `(binop| <)  => return mkConst ``BinOp.lt
   | `(binop| <=) => return mkConst ``BinOp.le
-  | `(binop| >) =>  return mkConst ``BinOp.gt
+  | `(binop| >)  => return mkConst ``BinOp.gt
   | `(binop| >=) => return mkConst ``BinOp.ge
-  | `(binop| =) =>  return mkConst ``BinOp.eq
+  | `(binop| =)  => return mkConst ``BinOp.eq
   | `(binop| !=) => return mkConst ``BinOp.ne
   | _ => throwUnsupportedSyntax
 
@@ -49,6 +59,9 @@ partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| $eₗ:expression $o:binop $eᵣ:expression) => do
     mkAppM ``Expression.binOp
       #[← elabBinOp o, ← elabExpression eₗ, ← elabExpression eᵣ]
+  | `(expression| [$ls:literal,*]) => do
+    let l ← ls.getElems.data.mapM elabLiteral
+    mkAppM ``Expression.list #[← mkListLit (Lean.mkConst ``_root_.Literal) l]
   | `(expression| ($e:expression)) => elabExpression e
   | _ => throwUnsupportedSyntax
 
@@ -102,7 +115,8 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
 
 #eval >>
 a := 1 + 1
-<<
+[1, 2, 3, 1.3, "oi"] + 3
+<<.run
 
 #eval >>
 a x := x

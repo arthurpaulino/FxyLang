@@ -12,10 +12,19 @@ def Literal.typeStr : Literal → String
   | float _ => "float"
   | str   _ => "str"
 
+def removeRightmostZeros (s : String) : String :=
+  let rec aux (buff res : List Char) : List Char → List Char
+    | []      => res.reverse
+    | a :: as =>
+      if a ≠ '0'
+        then aux [] (a :: (buff ++ res)) as
+        else aux (a :: buff) res as
+  ⟨aux [] [] s.data⟩
+
 protected def Literal.toString : Literal → String
   | bool  b => toString b
   | int   i => toString i
-  | float f => toString f
+  | float f => removeRightmostZeros $ toString f
   | str   s => s
 
 def Lambda.toString (l : Lambda) : String :=

@@ -11,9 +11,21 @@ import FxyLang.Syntax
 open Lean
 
 def mkLiteral : Syntax → Except String _root_.Literal
-  | `(literal| $n:num) => return .int n.toNat
+  | `(literal| $[-%$neg]?$n:num) =>
+    if neg.isNone
+      then return .int $ Int.ofNat n.toNat
+      else return .int $ Int.negOfNat n.toNat
   | `(literal| true)   => return .bool Bool.true
   | `(literal| false)  => return .bool Bool.false
+  | `(literal| $s:str) => match s.isStrLit? with
+    | some s => return .str s
+    | none   => unreachable!
+  | `(literal| $[-%$neg]?$f:scientific) => match f.isScientificLit? with
+    | some (m, s, e) =>
+      if neg.isNone
+        then return .float $ OfScientific.ofScientific m s e
+        else return .float $ - OfScientific.ofScientific m s e
+    | none           => unreachable!
   | _ => throw "error: can't parse value"
 
 def mkBinOp : Syntax → Except String BinOp
@@ -37,6 +49,8 @@ partial def mkExpression : Syntax → Except String Expression
     | e :: es => return .app n.getId.toString (es.toNEList e)
   | `(expression| $l:expression $o:binop $r:expression) =>
     return .binOp (← mkBinOp o) (← mkExpression l) (← mkExpression r)
+  | `(expression| [$ls:literal,*]) =>
+    return .list $ ← ls.getElems.data.mapM mkLiteral
   | `(expression| ($e:expression)) => mkExpression e
   | _ => throw "error: can't parse expression"
 
@@ -124,6 +138,7 @@ def parse : String → Environment → IO (Option String × Program)
 def code := "
 x x := x + 5
 x 4
+[1, \"oi\", 1.5]
 "
 
 def cCode := cleanseCode code
@@ -132,7 +147,7 @@ def cCode := cleanseCode code
   let p := parseProgram (← getEnv) cCode
   match p with
     | Except.ok p =>
-      let (c, r) := p.runP
+      let (c, r) := p.run
       IO.println r
       IO.println "------context-------"
       IO.println c
