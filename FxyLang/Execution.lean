@@ -13,6 +13,9 @@ def cantEvalAsBool (e : Expression) (v : Value) : String :=
 def notFound (n : String) : String :=
   s!"'{n}' not found"
 
+def notUncurriedFunction (n : String) : String :=
+  s!"'{n}' is not an uncurried function"
+
 def consume (p : Program) :
     NEList String → NEList Expression → (Option (NEList String)) × Program
   | .cons n ns, .cons e es => consume (.seq (.decl n (.eval e)) p) ns es
@@ -64,7 +67,7 @@ mutual
         match h' : consume p ns es with
         | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
         | (none,   p) => (p.runP ctx).2
-      | _ => .err $ s!"'{n}' is not an uncurried function"
+      | _ => .err $ notUncurriedFunction n
     | .unOp o e => match reduceP ctx e with
       | .val v      => match v.unOp o with
         | .ok    v => .val v
@@ -74,9 +77,8 @@ mutual
       | (.val vₗ, .val vᵣ) => match vₗ.binOp vᵣ o with
         | .ok    v => .val v
         | .error m => .err m
-      | (.err m, .val _)   => .err m
-      | (.val _, .err m)   => .err m
-      | (.err mₗ, .err mᵣ) => .err s!"{mₗ}\n{mᵣ}"
+      | (.err m, _)   => .err m
+      | (_, .err m)   => .err m
 
   partial def Program.runP (ctx : Context := default) :
       Program → Context × Result
@@ -110,7 +112,7 @@ inductive Continuation
   | exit   : Continuation
   | seq    : Program → Continuation → Continuation
   | decl   : Context → String → Continuation → Continuation
-  | fork   : Program → Program → Continuation → Continuation
+  | fork   : Expression → Program → Program → Continuation → Continuation
   | unOp   : UnOp → Expression → Continuation → Continuation
   | binOp1 : BinOp → Expression → Continuation → Continuation
   | binOp2 : BinOp → Value → Continuation → Continuation
@@ -128,16 +130,8 @@ def State.step : State → State
   | prog ctx (.eval e) k => expr ctx e k
   | prog ctx (.seq p₁ p₂) k => prog ctx p₁ (.seq p₂ k)
   | prog ctx (.decl n p) k => prog ctx p (.decl ctx n k)
-  | prog ctx (.fork e pT pF) k => expr ctx e (.fork pT pF k)
-  | prog ctx lp@(.loop e p) k => expr ctx e (.fork (.seq p lp) .skip k)
-  | ret ctx _ (.seq p k) => prog ctx p k
-  | ret ctx (.lit $ .bool true) (.fork pT _ k) => prog ctx pT k
-  | ret ctx (.lit $ .bool false) (.fork _ pF k) => prog ctx pF k
-  | ret ctx v (.fork ..) =>
-    error ctx s!"'{v}', of type {v.typeStr}, is not a bool"
-  | ret _ v (.decl ctx n k) => ret (ctx.insert n v) .nil k
-  | s@(error ..) => s
-  | s@(done ..) => s
+  | prog ctx (.fork e pT pF) k => expr ctx e (.fork e pT pF k)
+  | prog ctx lp@(.loop e p) k => expr ctx e (.fork e (.seq p lp) .skip k)
   | ret ctx v .exit => done ctx v
   | expr ctx (.lit l) k => ret ctx (.lit l) k
   | expr ctx (.list l) k => ret ctx (.list l) k
@@ -151,9 +145,14 @@ def State.step : State → State
       | (some l, p) => ret ctx (.lam $ .mk l (noDupOfConsumeNoDup h h') p) k
       | (none,   p) => prog ctx p k
     | none => error ctx $ notFound n
-    | _    => error ctx s!"'{n}' is not an uncurried function"
+    | _    => error ctx $ notUncurriedFunction n
   | expr ctx (.unOp o e) k => expr ctx e (.unOp o e k)
   | expr ctx (.binOp o e1 e2) k => expr ctx e1 (.binOp1 o e2 k)
+  | ret ctx _ (.seq p k) => prog ctx p k
+  | ret ctx (.lit $ .bool true) (.fork _ pT _ k) => prog ctx pT k
+  | ret ctx (.lit $ .bool false) (.fork _ _ pF k) => prog ctx pF k
+  | ret ctx v (.fork e ..) => error ctx $ cantEvalAsBool e v
+  | ret _ v (.decl ctx n k) => ret (ctx.insert n v) .nil k
   | ret ctx v (.unOp o e k) => match v.unOp o with
     | .error m => error ctx m
     | .ok    v => ret ctx v k
@@ -161,6 +160,8 @@ def State.step : State → State
   | ret ctx v2 (.binOp2 o v1 k) => match v1.binOp v2 o with
     | .error m => error ctx m
     | .ok    v => ret ctx v k
+  | s@(error ..) => s
+  | s@(done ..) => s
 
 partial def State.run (s : State) : Context × Result :=
   match s.step with
