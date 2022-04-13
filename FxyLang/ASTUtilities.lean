@@ -216,7 +216,6 @@ def Program.toString (p : Program) : String :=
     | fork      p? p q =>
       s!"{blank l}if {p?.toString} then\n{aux (l+2) p}\n" ++
         s!"else\n{aux (l+2) q}"
-    | fail s          => s!"raise {s}"
   aux 0 p
 
 instance : ToString Program := ⟨Program.toString⟩

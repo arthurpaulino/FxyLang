@@ -24,17 +24,16 @@ mutual
     | mk : (l : NEList String) → l.noDup → Program → Lambda
 
   inductive Expression
-    | lit  : Literal → Expression
-    | var  : String → Expression
-    | lam  : Lambda → Expression
-    | list : List Literal → Expression
-    | app  : String → NEList Expression → Expression
+    | lit   : Literal → Expression
+    | var   : String → Expression
+    | lam   : Lambda → Expression
+    | list  : List Literal → Expression
+    | app   : String → NEList Expression → Expression
     | unOp  : UnOp  → Expression → Expression
     | binOp : BinOp → Expression → Expression → Expression
 
   inductive Program
     | skip  : Program
-    | fail  : String  → Program
     | eval  : Expression → Program
     | decl  : String  → Program → Program
     | seq   : Program → Program → Program
@@ -45,8 +44,8 @@ mutual
 end
 
 inductive Value
-  | nil   : Value
-  | lit   : Literal → Value
-  | list  : List Literal → Value
-  | lam   : Lambda → Value
+  | nil  : Value
+  | lit  : Literal → Value
+  | list : List Literal → Value
+  | lam  : Lambda → Value
   deriving Inhabited

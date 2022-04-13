@@ -17,21 +17,23 @@ def notUncurriedFunction (n : String) : String :=
   s!"'{n}' is not an uncurried function"
 
 def consume (p : Program) :
-    NEList String → NEList Expression → (Option (NEList String)) × Program
+    NEList String → NEList Expression →
+      Except String ((Option (NEList String)) × Program)
   | .cons n ns, .cons e es => consume (.seq (.decl n (.eval e)) p) ns es
-  | .cons n ns, .uno  e    => (some ns, .seq (.decl n (.eval e)) p)
-  | .uno  n,    .uno  e    => (none, .seq (.decl n (.eval e)) p)
-  | .uno  _,    .cons ..   => (none, .fail "incompatible number of parameters")
+  | .cons n ns, .uno  e    => .ok (some ns, .seq (.decl n (.eval e)) p)
+  | .uno  n,    .uno  e    => .ok (none, .seq (.decl n (.eval e)) p)
+  | .uno  _,    .cons ..   => throw "incompatible number of parameters"
 
 theorem noDupOfConsumeNoDup
-  (h : ns.noDup) (h' : consume p' ns es = (some l, p)) : l.noDup = true := by
-    induction ns generalizing p' es with
-    | uno  _      => cases es <;> cases h'
-    | cons _ _ hi =>
-      simp [NEList.noDup] at h
-      cases es with
-      | uno  _   => simp [consume] at h'; simp only [h.2, ← h'.1]
-      | cons _ _ => exact hi h.2 h'
+  (h : ns.noDup) (h' : consume p' ns es = .ok (some l, p)) :
+    l.noDup = true := by
+  induction ns generalizing p' es with
+  | uno  _      => cases es <;> cases h'
+  | cons _ _ hi =>
+    simp [NEList.noDup] at h
+    cases es with
+    | uno  _   => simp [consume] at h'; simp only [h.2, ← h'.1]
+    | cons _ _ => exact hi h.2 h'
 
 abbrev Context := Std.HashMap String Value
 
@@ -54,7 +56,7 @@ instance : ToString Result := ⟨Result.toString⟩
 
 mutual
 
-  partial def reduceP (ctx : Context) : Expression → Result
+  partial def reduce (ctx : Context) : Expression → Result
     | .lit  l   => .val $ .lit l
     | .list l   => .val $ .list l
     | .lam  l   => .val $ .lam l
@@ -65,46 +67,46 @@ mutual
       | none                     => .err $ notFound n
       | some (.lam $ .mk ns h p) =>
         match h' : consume p ns es with
-        | (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
-        | (none,   p) => (p.runP ctx).2
+        | .ok (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
+        | .ok (none, p)   => (p.run! ctx).2
+        | .error m        => .err m
       | _ => .err $ notUncurriedFunction n
-    | .unOp o e => match reduceP ctx e with
+    | .unOp o e => match reduce ctx e with
       | .val v      => match v.unOp o with
         | .ok    v => .val v
         | .error m => .err m
       | er@(.err m) => er
-    | .binOp o eₗ eᵣ => match (reduceP ctx eₗ, reduceP ctx eᵣ) with
+    | .binOp o eₗ eᵣ => match (reduce ctx eₗ, reduce ctx eᵣ) with
       | (.val vₗ, .val vᵣ) => match vₗ.binOp vᵣ o with
         | .ok    v => .val v
         | .error m => .err m
-      | (.err m, _)   => .err m
-      | (_, .err m)   => .err m
+      | (.err m, _)        => .err m
+      | (_, .err m)        => .err m
 
-  partial def Program.runP (ctx : Context := default) :
+  partial def Program.run! (ctx : Context := default) :
       Program → Context × Result
     | skip      => (ctx, .val .nil)
     | seq p₁ p₂ =>
-      let res := p₁.runP ctx
+      let res := p₁.run! ctx
       match res.2 with
       | .err _ => res
-      | _      => p₂.runP res.1
-    | decl n p => match (p.runP ctx).2 with
+      | _      => p₂.run! res.1
+    | decl n p => match (p.run! ctx).2 with
       | .err s => (ctx, .err s)
       | .val v => (ctx.insert n v, .val .nil)
-    | fork e pT pF => match reduceP ctx e with
-      | .val $ .lit $ .bool b => if b then pT.runP ctx else pF.runP ctx
+    | fork e pT pF => match reduce ctx e with
+      | .val $ .lit $ .bool b => if b then pT.run! ctx else pF.run! ctx
       | .val v                => (ctx, .err $ cantEvalAsBool e v)
       | .err m                => (ctx, .err m)
-    | loop e p  => match reduceP ctx e with
+    | loop e p  => match reduce ctx e with
       | .val $ .lit $ .bool b =>
         if !b then (ctx, .val .nil) else
-          match p.runP ctx with
+          match p.run! ctx with
           | er@(_, .err _) => er
-          | (ctx, _)       => (loop e p).runP ctx
+          | (ctx, _)       => (loop e p).run! ctx
       | .val v      => (ctx, .err $ cantEvalAsBool e v)
       | er@(.err _) => (ctx, er)
-    | eval e => (ctx, (reduceP ctx e))
-    | fail s => (ctx, .err s)
+    | eval e => (ctx, (reduce ctx e))
 
 end
 
@@ -126,7 +128,6 @@ inductive State
 
 def State.step : State → State
   | prog ctx .skip k => ret ctx .nil k
-  | prog ctx (.fail m) _ => error ctx m
   | prog ctx (.eval e) k => expr ctx e k
   | prog ctx (.seq p₁ p₂) k => prog ctx p₁ (.seq p₂ k)
   | prog ctx (.decl n p) k => prog ctx p (.decl ctx n k)
@@ -142,8 +143,9 @@ def State.step : State → State
   | expr ctx (.app n es) k => match ctx[n] with
     | some (.lam $ .mk ns h p) =>
       match h' : consume p ns es with
-      | (some l, p) => ret ctx (.lam $ .mk l (noDupOfConsumeNoDup h h') p) k
-      | (none,   p) => prog ctx p k
+      | .ok (some l, p) => ret ctx (.lam $ .mk l (noDupOfConsumeNoDup h h') p) k
+      | .ok (none, p)   => prog ctx p k
+      | .error m        => error ctx m
     | none => error ctx $ notFound n
     | _    => error ctx $ notUncurriedFunction n
   | expr ctx (.unOp o e) k => expr ctx e (.unOp o e k)
@@ -161,15 +163,12 @@ def State.step : State → State
     | .error m => error ctx m
     | .ok    v => ret ctx v k
   | s@(error ..) => s
-  | s@(done ..) => s
+  | s@(done ..)  => s
 
-partial def State.run (s : State) : Context × Result :=
-  match s.step with
-  | error ctx m => (ctx, .err m)
-  | done  ctx v => (ctx, .val v)
-  | s           => s.run
-
-def Program.run (p : Program) : Context × Result :=
-  match State.prog {} p .exit |>.run with
-  | (ctx, .err m) => (ctx, .err m)
-  | (ctx, .val v) => (ctx, .val v)
+partial def Program.run (p : Program) : Context × Result :=
+  let rec run' (s : State) : Context × Result :=
+    match s.step with
+    | .error ctx m => (ctx, .err m)
+    | .done  ctx v => (ctx, .val v)
+    | s            => run' s
+  run' $ State.prog {} p .exit
