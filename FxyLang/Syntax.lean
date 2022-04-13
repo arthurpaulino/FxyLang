@@ -4,28 +4,31 @@
   Authors: Arthur Paulino
 -/
 
-declare_syntax_cat                             value
-syntax ("-" noWs)? num                       : value
-syntax str                                   : value
-syntax "true"                                : value
-syntax "false"                               : value
-syntax ("-" noWs)? num noWs "." (noWs num)?  : value
-syntax withPosition("[ " colGt value,* " ]") : value
-syntax "nil"                                 : value
+declare_syntax_cat                               literal
+syntax ("-" noWs)? num                         : literal
+syntax str                                     : literal
+syntax "true"                                  : literal
+syntax "false"                                 : literal
+syntax ("-" noWs)? num noWs "." (noWs num)?    : literal
+
+declare_syntax_cat binop
+syntax " + "     : binop
+syntax " * "     : binop
+syntax " = "     : binop
+syntax " != "    : binop
+syntax " < "     : binop
+syntax " <= "    : binop
+syntax " > "     : binop
+syntax " >= "    : binop
 
 declare_syntax_cat                       expression
-syntax value                           : expression
-syntax " ! " expression                : expression
-syntax expression " + "  expression    : expression
-syntax expression " * "  expression    : expression
-syntax expression " = "  expression    : expression
-syntax expression " != " expression    : expression
-syntax expression " < "  expression    : expression
-syntax expression " <= " expression    : expression
-syntax expression " > "  expression    : expression
-syntax expression " >= " expression    : expression
+syntax literal                         : expression
+syntax withPosition(
+  "[ " colGt literal,* " ]")           : expression
 syntax:51 ident                        : expression
 syntax:49 ident (colGt expression:50)+ : expression
+syntax " ! " expression                : expression
+syntax expression binop expression     : expression
 syntax " ( " expression " ) "          : expression
 
 declare_syntax_cat                      program
@@ -33,13 +36,12 @@ declare_syntax_cat                      programSeq
 syntax withPosition((colGe program)+) : programSeq
 
 syntax "skip"                                       : program
-syntax withPosition(ident+ " := " colGt programSeq) : program
+syntax withPosition(ident+ colGt " := " programSeq) : program
 syntax expression                                   : program
 syntax withPosition(
-  "if " expression colGe " then "
+  "if " programSeq colGe " then "
     colGt programSeq
   (colGe " else "
     colGt programSeq)?)                             : program
-syntax withPosition("while " expression " do "
+syntax withPosition("while " programSeq " do "
   colGt programSeq)                                 : program
-syntax " ( " programSeq " ) "                       : program
