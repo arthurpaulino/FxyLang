@@ -107,24 +107,24 @@ mutual
 end
 
 inductive Continuation
-  | exit : Continuation
-  | seq : Program → Continuation → Continuation
-  | decl : Context → String → Continuation → Continuation
-  | fork : Program → Program → Continuation → Continuation
-  | unOp : UnOp → Expression → Continuation → Continuation
+  | exit   : Continuation
+  | seq    : Program → Continuation → Continuation
+  | decl   : Context → String → Continuation → Continuation
+  | fork   : Program → Program → Continuation → Continuation
+  | unOp   : UnOp → Expression → Continuation → Continuation
   | binOp1 : BinOp → Expression → Continuation → Continuation
   | binOp2 : BinOp → Value → Continuation → Continuation
 
 inductive State
-  | ret : Context → Value → Continuation → State
-  | prog : Context → Program → Continuation → State
-  | expr : Context → Expression → Continuation → State
-  | error : String → State
-  | done : Value → State
+  | ret   : Context → Value → Continuation → State
+  | prog  : Context → Program → Continuation → State
+  | expr  : Context → Expression → Continuation → State
+  | error : Context → String → State
+  | done  : Context → Value → State
 
 def State.step : State → State
   | prog ctx .skip k => ret ctx .nil k
-  | prog _ (.fail m) _ => error m
+  | prog ctx (.fail m) _ => error ctx m
   | prog ctx (.eval e) k => expr ctx e k
   | prog ctx (.seq p₁ p₂) k => prog ctx p₁ (.seq p₂ k)
   | prog ctx (.decl n p) k => prog ctx p (.decl ctx n k)
@@ -133,15 +133,16 @@ def State.step : State → State
   | ret ctx _ (.seq p k) => prog ctx p k
   | ret ctx (.lit $ .bool true) (.fork pT _ k) => prog ctx pT k
   | ret ctx (.lit $ .bool false) (.fork _ pF k) => prog ctx pF k
-  | ret _ v (.fork ..) => error s!"'{v}', of type {v.typeStr}, is not a bool"
+  | ret ctx v (.fork ..) =>
+    error ctx s!"'{v}', of type {v.typeStr}, is not a bool"
   | ret _ v (.decl ctx n k) => ret (ctx.insert n v) .nil k
-  | s@(error _) => s
-  | s@(done _) => s
-  | ret ctx v .exit => done v
+  | s@(error ..) => s
+  | s@(done ..) => s
+  | ret ctx v .exit => done ctx v
   | expr ctx (.lit l) k => ret ctx (.lit l) k
   | expr ctx (.list l) k => ret ctx (.list l) k
   | expr ctx (.var n) k => match ctx[n] with
-    | none   => error $ notFound n
+    | none   => error ctx $ notFound n
     | some v => ret ctx v k
   | expr ctx (.lam l@(.mk ..)) k => ret ctx (.lam l) k
   | expr ctx (.app n es) k => match ctx[n] with
@@ -149,14 +150,25 @@ def State.step : State → State
       match h' : consume p ns es with
       | (some l, p) => ret ctx (.lam $ .mk l (noDupOfConsumeNoDup h h') p) k
       | (none,   p) => prog ctx p k
-    | none => error $ notFound n
-    | _    => error s!"'{n}' is not an uncurried function"
+    | none => error ctx $ notFound n
+    | _    => error ctx s!"'{n}' is not an uncurried function"
   | expr ctx (.unOp o e) k => expr ctx e (.unOp o e k)
   | expr ctx (.binOp o e1 e2) k => expr ctx e1 (.binOp1 o e2 k)
   | ret ctx v (.unOp o e k) => match v.unOp o with
-    | .error m => error m
+    | .error m => error ctx m
     | .ok    v => ret ctx v k
   | ret ctx v1 (.binOp1 o e2 k) => expr ctx e2 (.binOp2 o v1 k)
   | ret ctx v2 (.binOp2 o v1 k) => match v1.binOp v2 o with
-    | .error m => error m
+    | .error m => error ctx m
     | .ok    v => ret ctx v k
+
+partial def State.run (s : State) : Context × Result :=
+  match s.step with
+  | error ctx m => (ctx, .err m)
+  | done  ctx v => (ctx, .val v)
+  | s           => s.run
+
+def Program.run (p : Program) : Context × Result :=
+  match State.prog {} p .exit |>.run with
+  | (ctx, .err m) => (ctx, .err m)
+  | (ctx, .val v) => (ctx, .val v)
