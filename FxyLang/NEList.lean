@@ -17,6 +17,10 @@ def List.noDup [BEq α] : List α → Bool
   | []      => true
   | a :: as => ¬as.contains a && as.noDup
 
+def NEList.length : NEList α → Nat
+  | uno  _   => 1
+  | cons _ l => 1 + l.length
+
 @[specialize]
 def NEList.foldl (f : α → β → α) : (init : α) → NEList β → α
   | a, uno  b   => f a b
@@ -143,3 +147,6 @@ theorem NEListContainsIffListContains [BEq α] [LawfulBEq α] {l : NEList α} :
 
 theorem NEListNoDupIffToListNoDup [BEq α] {l : NEList α} :
   l.noDup ↔ l.toList.noDup := sorry
+
+theorem NEListLengthEqToListLength [BEq α] {l : NEList α} :
+  l.length = l.toList.length := sorry
