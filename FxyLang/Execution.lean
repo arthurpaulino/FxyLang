@@ -131,13 +131,14 @@ end
 inductive Continuation
   | exit   : Continuation
   | seq    : Program → Continuation → Continuation
-  | decl   : Context → String → Continuation → Continuation
+  | decl   : String → Continuation → Continuation
   | fork   : Expression → Program → Program → Continuation → Continuation
   | loop   : Expression → Program → Continuation → Continuation
   | unOp   : UnOp → Expression → Continuation → Continuation
   | binOp₁ : BinOp → Expression → Continuation → Continuation
   | binOp₂ : BinOp → Value → Continuation → Continuation
   | app    : Expression → NEList Expression → Continuation → Continuation
+  | block  : Context → Continuation → Continuation
   | print  : Continuation → Continuation
 
 inductive State
@@ -151,7 +152,7 @@ def State.step : State → State
   | prog .skip ctx k => ret .nil ctx k
   | prog (.eval e) ctx k => expr e ctx k
   | prog (.seq p₁ p₂) ctx k => prog p₁ ctx (.seq p₂ k)
-  | prog (.decl n p) ctx k => prog p ctx (.decl ctx n k)
+  | prog (.decl n p) ctx k => prog p ctx $ .block ctx (.decl n k)
   | prog (.fork e pT pF) ctx k => expr e ctx (.fork e pT pF k)
   | prog (.loop e p) ctx k => expr e ctx (.loop e p k)
   | prog (.print e) ctx k => expr e ctx (.print k)
@@ -170,11 +171,13 @@ def State.step : State → State
   | ret v ctx (.print k) => dbg_trace v; ret .nil ctx k
   | ret _ ctx (.seq p k) => prog p ctx k
 
+  | ret v _ (.block ctx k) => ret v ctx k
+
   | ret v ctx (.app e es k) => match v with
     | .lam $ .mk ns h p => match h' : consume p ns es with
       | some (some l, p) =>
         ret (.lam $ .mk l (noDupOfConsumeNoDup h h') p) ctx k
-      | some (none, p) => prog p ctx k
+      | some (none, p) => prog p ctx (.block ctx k)
       | none => error .runTime ctx $ wrongNParameters e ns.length es.length
     | v                 => error .type ctx $ notAFunction e v
  
@@ -186,7 +189,7 @@ def State.step : State → State
   | ret (.lit $ .bool false) ctx (.loop _ _ k) => ret .nil ctx k
   | ret v ctx (.loop e ..) => error .type ctx $ cantEvalAsBool e v
 
-  | ret v _ (.decl ctx n k) => ret .nil (ctx.insert n v) k
+  | ret v ctx (.decl n k) => ret .nil (ctx.insert n v) k
 
   | ret v ctx (.unOp o e k) => match v.unOp o with
     | .error m => error .type ctx m

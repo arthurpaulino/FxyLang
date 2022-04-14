@@ -124,11 +124,17 @@ a := 1 + 1
 f x y z := x + y + z
 q := f 3 4
 q 5
+x := 1
 <<.run
 
 #eval >>
 f x y z := x + y + z
 f 3 4 5
+<<.run
+
+#eval >>
+f x y z := x + y + z
+(f 3 4) 5
 <<.run
 
 #eval >>
