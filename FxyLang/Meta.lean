@@ -67,6 +67,8 @@ partial def elabExpression : Syntax → TermElabM Expr
 
 partial def elabProgram : Syntax → TermElabM Expr
   | `(program| skip)  => return mkConst ``Program.skip
+  | `(program| $e:expression) => do
+    mkAppM ``Program.eval #[← elabExpression e]
   | `(programSeq| $p:program $[$ps:program]*) => do
     ps.foldlM (init := ← elabProgram p) fun a b => do
       mkAppM ``Program.seq #[a, ← elabProgram b]
@@ -96,8 +98,8 @@ partial def elabProgram : Syntax → TermElabM Expr
       #[← elabExpression e, ← elabProgram p, q]
   | `(program| while $e:expression do $p:programSeq) => do
     mkAppM ``Program.loop #[← elabExpression e, ← elabProgram p]
-  | `(program| $e:expression) => do
-    mkAppM ``Program.eval #[← elabExpression e]
+  | `(program| !print $e:expression) => do
+      return mkApp' ``Program.print (← elabExpression e)
   | _ => throwUnsupportedSyntax
 
 ------- ↓↓ testing area ↓↓

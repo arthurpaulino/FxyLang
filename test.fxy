@@ -1,3 +1,6 @@
 a := 3
+!print "oi"
 b := 5
+!print b
+!print 1000
 a + b

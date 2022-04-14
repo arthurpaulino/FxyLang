@@ -39,6 +39,7 @@ mutual
     | seq   : Program → Program → Program
     | fork  : Expression → Program → Program → Program
     | loop  : Expression → Program → Program
+    | print : Expression → Program
     deriving Inhabited
 
 end

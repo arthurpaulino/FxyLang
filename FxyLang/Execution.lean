@@ -86,6 +86,7 @@ mutual
   partial def Program.run! (ctx : Context := default) :
       Program → Context × Result
     | skip      => (ctx, .val .nil)
+    | eval e => (ctx, (reduce ctx e))
     | seq p₁ p₂ =>
       let res := p₁.run! ctx
       match res.2 with
@@ -106,7 +107,9 @@ mutual
           | (ctx, _)       => (loop e p).run! ctx
       | .val v      => (ctx, .err $ cantEvalAsBool e v)
       | er@(.err _) => (ctx, er)
-    | eval e => (ctx, (reduce ctx e))
+    | print e   => match reduce ctx e with
+      | .val v => dbg_trace v; (ctx, .val .nil)
+      | er@(.err _) => (ctx, er)
 
 end
 
@@ -118,6 +121,7 @@ inductive Continuation
   | unOp   : UnOp → Expression → Continuation → Continuation
   | binOp1 : BinOp → Expression → Continuation → Continuation
   | binOp2 : BinOp → Value → Continuation → Continuation
+  | print  : Continuation → Continuation
 
 inductive State
   | ret   : Context → Value → Continuation → State
@@ -133,6 +137,7 @@ def State.step : State → State
   | prog ctx (.decl n p) k => prog ctx p (.decl ctx n k)
   | prog ctx (.fork e pT pF) k => expr ctx e (.fork e pT pF k)
   | prog ctx lp@(.loop e p) k => expr ctx e (.fork e (.seq p lp) .skip k)
+  | prog ctx (.print e) k => expr ctx e (.print k)
   | ret ctx v .exit => done ctx v
   | expr ctx (.lit l) k => ret ctx (.lit l) k
   | expr ctx (.list l) k => ret ctx (.list l) k
@@ -150,6 +155,7 @@ def State.step : State → State
     | _    => error ctx $ notUncurriedFunction n
   | expr ctx (.unOp o e) k => expr ctx e (.unOp o e k)
   | expr ctx (.binOp o e1 e2) k => expr ctx e1 (.binOp1 o e2 k)
+  | ret ctx v (.print k) => dbg_trace v; ret ctx .nil k
   | ret ctx _ (.seq p k) => prog ctx p k
   | ret ctx (.lit $ .bool true) (.fork _ pT _ k) => prog ctx pT k
   | ret ctx (.lit $ .bool false) (.fork _ _ pF k) => prog ctx pF k

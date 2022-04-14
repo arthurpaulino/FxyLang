@@ -45,3 +45,4 @@ syntax withPosition(
     colGt programSeq)?)                             : program
 syntax withPosition("while " programSeq " do "
   colGt programSeq)                                 : program
+syntax withPosition("!print " colGt expression)     : program
