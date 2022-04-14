@@ -153,9 +153,9 @@ def State.step : State → State
   | prog (.seq p₁ p₂) ctx k => prog p₁ ctx (.seq p₂ k)
   | prog (.decl n p) ctx k => prog p ctx (.decl ctx n k)
   | prog (.fork e pT pF) ctx k => expr e ctx (.fork e pT pF k)
-  -- | prog lp@(.loop e p) ctx k => expr e ctx (.fork e (.seq p lp) .skip k)
   | prog (.loop e p) ctx k => expr e ctx (.loop e p k)
   | prog (.print e) ctx k => expr e ctx (.print k)
+
   | expr (.lit l) ctx k => ret (.lit l) ctx k
   | expr (.list l) ctx k => ret (.list l) ctx k
   | expr (.var n) ctx k => match ctx[n] with
@@ -182,12 +182,12 @@ def State.step : State → State
   | ret (.lit $ .bool false) ctx (.fork _ _ pF k) => prog pF ctx k
   | ret v ctx (.fork e ..) => error .type ctx $ cantEvalAsBool e v
 
-  | ret (.lit $ .bool true)  ctx (.loop e p k) =>
-    prog (.seq p (.loop e p)) ctx k
+  | ret (.lit $ .bool true) ctx (.loop e p k) => prog (.seq p (.loop e p)) ctx k
   | ret (.lit $ .bool false) ctx (.loop _ _ k) => ret .nil ctx k
   | ret v ctx (.loop e ..) => error .type ctx $ cantEvalAsBool e v
 
   | ret v _ (.decl ctx n k) => ret .nil (ctx.insert n v) k
+
   | ret v ctx (.unOp o e k) => match v.unOp o with
     | .error m => error .type ctx m
     | .ok    v => ret v ctx k
@@ -195,6 +195,7 @@ def State.step : State → State
   | ret v2 ctx (.binOp₂ o v1 k) => match v1.binOp v2 o with
     | .error m => error .type ctx m
     | .ok    v => ret v ctx k
+
   | s@(error ..) => s
   | s@(done ..)  => s
 
