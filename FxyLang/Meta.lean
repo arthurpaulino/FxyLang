@@ -47,13 +47,13 @@ def elabBinOp : Syntax → TermElabM Expr
 partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| $v:literal) => do mkAppM ``Expression.lit #[← elabLiteral v]
   | `(expression| $n:ident) => mkAppM ``Expression.var #[elabStringOfIdent n]
-  | `(expression| $n:ident $[$es:expression]*) => do
+  | `(expression| $e:expression $[$es:expression]*) => do
     match ← es.data.mapM elabExpression with
     | []      => unreachable!
-    | e :: es =>
+    | e' :: es =>
       let l  ← mkListLit (Lean.mkConst ``Expression) es
-      let nl ← mkAppM ``List.toNEList #[e, l]
-      mkAppM ``Expression.app #[elabStringOfIdent n, nl]
+      let nl ← mkAppM ``List.toNEList #[e', l]
+      mkAppM ``Expression.app #[← elabExpression e, nl]
   | `(expression| ! $p:expression) => do
     mkAppM ``Expression.unOp #[mkConst ``UnOp.not, ← elabExpression p]
   | `(expression| $eₗ:expression $o:binop $eᵣ:expression) => do
@@ -118,6 +118,17 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
 #eval >>
 a := 1 + 1
 [1, 2, 3, 1.3, "oi"] + 3
+<<.run
+
+#eval >>
+f x y z := x + y + z
+q := f 3 4
+q 5
+<<.run
+
+#eval >>
+f x y z := x + y + z
+f 3 4 5
 <<.run
 
 #eval >>

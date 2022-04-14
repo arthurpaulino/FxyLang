@@ -43,10 +43,10 @@ partial def mkExpression : Syntax → Except String Expression
   | `(expression| $v:literal)     => return .lit (← mkLiteral v)
   | `(expression| !$e:expression) => return .unOp .not (← mkExpression e)
   | `(expression| $n:ident)       => return .var n.getId.toString
-  | `(expression| $n:ident $[$es:expression]*) => do
+  | `(expression| $e:expression $[$es:expression]*) => do
     match ← es.data.mapM mkExpression with
     | []      => unreachable!
-    | e :: es => return .app n.getId.toString (es.toNEList e)
+    | e' :: es => return .app (← mkExpression e) (es.toNEList e')
   | `(expression| $l:expression $o:binop $r:expression) =>
     return .binOp (← mkBinOp o) (← mkExpression l) (← mkExpression r)
   | `(expression| [$ls:literal,*]) =>
@@ -138,9 +138,8 @@ def parse : String → Environment → IO (Option String × Program)
 -- "
 
 def code := "
-x x := x + 5
-x 4
-[1, \"oi\", 1.5]
+f x y z := x + y + z
+(f 3 4) 5
 "
 
 def cCode := cleanseCode code

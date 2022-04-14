@@ -21,15 +21,15 @@ syntax " <= "    : binop
 syntax " > "     : binop
 syntax " >= "    : binop
 
-declare_syntax_cat                       expression
-syntax literal                         : expression
+declare_syntax_cat                            expression
+syntax literal                              : expression
 syntax withPosition(
-  "[ " colGt literal,* " ]")           : expression
-syntax:51 ident                        : expression
-syntax:49 ident (colGt expression:50)+ : expression
-syntax " ! " expression                : expression
-syntax expression binop expression     : expression
-syntax " ( " expression " ) "          : expression
+  "[ " colGt literal,* " ]")                : expression
+syntax:51 ident                             : expression
+syntax:49 expression (colGt expression:50)+ : expression
+syntax " ! " expression                     : expression
+syntax expression binop expression          : expression
+syntax " ( " expression " ) "               : expression
 
 declare_syntax_cat                      program
 declare_syntax_cat                      programSeq

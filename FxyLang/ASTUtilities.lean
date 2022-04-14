@@ -55,7 +55,7 @@ mutual
     | lit  l    => l.toString
     | list l    => toString $ l.map Literal.toString
     | lam  l    => l.toString
-    | app  n es => s!"({n} {unfoldExpressions es})"
+    | app  e es => s!"({Expression.toString e} {unfoldExpressions es})"
     | .unOp  .not p   =>s!"(! {Expression.toString p})"
     | .binOp .add l r =>s!"({Expression.toString l} + {Expression.toString r})"
     | .binOp .mul l r =>s!"({Expression.toString l} * {Expression.toString r})"
@@ -163,14 +163,14 @@ def Value.eq : Value → Value → Except String Value
   | nil,     nil      => return lit $ .bool true
   | lit  lₗ, lit lᵣ   => return lit $ .bool $ lₗ.eq lᵣ
   | list lₗ, list  lᵣ => return lit $ .bool (listLiteralEq lₗ lᵣ)
-  | lam .. , lam ..   => throw "can't compare functions" --todo
+  | lam .. , lam ..   => throw "I can't compare functions"
   | _,       _        => return lit $ .bool false
 
 def Value.ne : Value → Value → Except String Value
   | nil,     nil      => return lit $ .bool false
   | lit  lₗ, lit lᵣ   => return lit $ .bool $ !(lₗ.eq lᵣ)
   | list lₗ, list  lᵣ => return lit $ .bool !(listLiteralEq lₗ lᵣ)
-  | lam ..,  lam ..   => throw "can't compare functions" -- todo
+  | lam ..,  lam ..   => throw "I can't compare functions"
   | _,       _        => return lit $ .bool true
 
 def Value.unOp : Value → UnOp → Except String Value

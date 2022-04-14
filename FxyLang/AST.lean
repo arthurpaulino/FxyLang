@@ -28,7 +28,7 @@ mutual
     | var   : String → Expression
     | lam   : Lambda → Expression
     | list  : List Literal → Expression
-    | app   : String → NEList Expression → Expression
+    | app   : Expression → NEList Expression → Expression
     | unOp  : UnOp  → Expression → Expression
     | binOp : BinOp → Expression → Expression → Expression
 
