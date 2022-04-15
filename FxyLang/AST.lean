@@ -5,6 +5,7 @@
 -/
 
 import FxyLang.NEList
+import Std
 
 inductive Literal
   | bool  : Bool   → Literal
@@ -49,4 +50,14 @@ inductive Value
   | lit  : Literal → Value
   | list : List Literal → Value
   | lam  : Lambda → Value
+  deriving Inhabited
+
+abbrev Context := Std.HashMap String Value
+
+inductive ErrorType
+  | name | type | runTime
+
+inductive Result
+  | val : Value → Result
+  | err : ErrorType → String → Result
   deriving Inhabited

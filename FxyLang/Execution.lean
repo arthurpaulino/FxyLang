@@ -4,7 +4,6 @@
   Authors: Arthur Paulino
 -/
 
-import Std
 import FxyLang.ASTUtilities
 
 def cantEvalAsBool (e : Expression) (v : Value) : String :=
@@ -40,35 +39,6 @@ theorem noDupOfConsumeNoDup
     cases es with
     | uno  _   => simp [consume] at h'; simp only [h.2, ← h'.1]
     | cons _ _ => exact hi h.2 h'
-
-abbrev Context := Std.HashMap String Value
-
-protected def Context.toString (c : Context) : String :=
-  c.toList.foldl (init := "")
-    fun acc (n, val) => acc ++ s!"{n}:\t{val}\n"
-
-instance : ToString Context := ⟨Context.toString⟩
-
-inductive ErrorType
-  | name | type | runTime
-
-def ErrorType.toString : ErrorType → String
-  | name    => "NameError"
-  | type    => "TypeError"
-  | runTime => "RunTimeError"
-
-instance : ToString ErrorType := ⟨ErrorType.toString⟩
-
-inductive Result
-  | val : Value → Result
-  | err : ErrorType → String → Result
-  deriving Inhabited
-
-def Result.toString : Result → String
-  | val v => v.toString
-  | err t m => s!"{t}: {m}"
-
-instance : ToString Result := ⟨Result.toString⟩
 
 mutual
 

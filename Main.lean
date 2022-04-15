@@ -18,18 +18,16 @@ def help : String :=
 "Usage: fxy COMMAND [ARGS]
 
 Commands:
-  run file.fxy            Runs the verified interpreter
-  run! file.fxy           Runs the unverified interpreter (faster)
-  repl                    Starts the interactive verified interpreter
-  repl!                   Starts the interactive unverified interpreter (faster)
-  format src.fxy tgt.fxy  Formats src.fxy and writes the result to tgt.fxy
-  compile src.fxy tgt     Compiles src.fxy to a binary"
+  run file.fxy         Runs `file.fxy` using the verified interpreter
+  run! file.fxy        Runs `file.fxy` using the unverified interpreter (faster)
+  repl                 Starts the interactive verified interpreter
+  repl!                Starts the interactive unverified interpreter (faster)
+  compile src.fxy tgt  Compiles src.fxy to a binary"
 
 def main : List String → IO Unit
   | ["run", f] => run f Bool.false
   | ["run!", f] => run f Bool.true
   | ["repl"] => IO.println "WIP"
   | ["repl!"] => IO.println "WIP"
-  | ["format", f, f'] => IO.println "WIP"
   | ["compile", f, f'] => IO.println "WIP"
   | _ => IO.println help

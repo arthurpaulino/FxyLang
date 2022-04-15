@@ -8,6 +8,44 @@ import Lean
 import FxyLang.Execution
 import FxyLang.Syntax
 
+def Program.getBindersNames? : Program → Option (NEList String)
+  | eval (.lam $ .mk ns ..)                    => some ns
+  | seq (decl _ (eval (.lam $ .mk ns ..)  )) _ => some ns
+  | _                                          => none
+
+def Program.isSequence : Program → Bool
+  | seq .. => Bool.true
+  | _      => Bool.false
+
+def blank (n : Nat) : String :=
+  let rec blankAux (cs : List Char) : Nat → List Char
+    | 0     => cs
+    | n + 1 => ' ' :: ' ' :: (blankAux cs n)
+  ⟨blankAux [] n⟩
+
+def progToString (p : Program) : String :=
+  let rec aux (l : Nat) : Program → String
+    | Program.skip     => s!"{blank l}skip"
+    | .seq  p q => s!"{blank (l-2)}{aux l p}\n{aux l q}"
+    | .eval e   => s!"{blank l}{exprToString e}"
+    | .loop e p => s!"{blank l}while {exprToString e} do\n{aux (l+2) p}"
+    | .decl n p =>
+      let pString := if p.isSequence
+        then s!"\n{aux (l+2) p}"
+        else s!" {aux (l-2) p}"
+      match p.getBindersNames? with
+      | none    => s!"{blank l}{n} :=" ++ pString
+      | some ns => s!"{blank l}{n} {ns.unfoldStrings} :=" ++ pString
+    | .fork e p q =>
+      s!"{blank l}if {exprToString e} then\n{aux (l+2) p}\n" ++
+        s!"else\n{aux (l+2) q}"
+    | .print e => s!"{blank l}!print {exprToString e}"
+  aux 0 p
+
+def Program.toString (p : Program) := progToString p
+
+instance : ToString Program := ⟨Program.toString⟩
+
 open Lean Elab Meta
 
 def mkApp' (name : Name) (e : Expr) : Expr :=
@@ -102,8 +140,6 @@ partial def elabProgram : Syntax → TermElabM Expr
       return mkApp' ``Program.print (← elabExpression e)
   | _ => throwUnsupportedSyntax
 
-------- ↓↓ testing area ↓↓
-
 elab ">>" ppLine p:programSeq ppLine "<<" : term => elabProgram p
 
 open Lean.Elab.Command Lean.Elab.Term in
@@ -114,6 +150,8 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
     synthesizeSyntheticMVarsNoPostponing
     unless (← isDefEq x y) do
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
+
+------- ↓↓ testing area ↓↓
 
 #eval >>
 a := 1 + 1

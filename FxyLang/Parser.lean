@@ -5,7 +5,7 @@
 -/
 
 import Lean
-import FxyLang.Execution
+import FxyLang.AST
 import FxyLang.Syntax
 
 open Lean
@@ -104,56 +104,3 @@ def metaParse : String → Environment → MetaM (Option String × Program)
 
 def parse : String → Environment → IO (Option String × Program)
   | c, env => Prod.fst <$> (metaParse c env).run'.toIO {} default
-
--- def code := "
--- ((x := 1)
---  (a := 2))
--- "
-
--- def code := "
--- x := 1
--- a := 2
--- "
-
--- def code := "
--- s := 0
--- a := 0
--- while a < 5 do
---   a := a + 1
---   s := s + a
--- s
--- "
-
--- def code := "
--- f x y := x + y
--- f3 := f 3
--- f32 := f3 2
--- "
-
--- def code := "
--- succ x := x + 1
--- app1 f x := f x #sdfsf
--- a := 7     # afa
--- app1 succ a
--- "
-
-def code := "
-f x y z := x + y + z
-(f 3 4) 5
-"
-
-def cCode := cleanseCode code
-#eval cCode
-#eval show MetaM _ from do
-  let p := parseProgram (← getEnv) cCode
-  match p with
-    | Except.ok p =>
-      let (c, r) := p.run
-      IO.println r
-      IO.println "------context-------"
-      IO.println c
-      IO.println "------program-------"
-      IO.println p
-      IO.println "--------AST---------"
-    | _ => pure ()
-  return p

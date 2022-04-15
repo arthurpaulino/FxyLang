@@ -16,7 +16,7 @@ def removeRightmostZeros (s : String) : String :=
   let rec aux (buff res : List Char) : List Char → List Char
     | []      => res.reverse
     | a :: as =>
-      if a ≠ '0'
+      if a != '0'
         then aux [] (a :: (buff ++ res)) as
         else aux (a :: buff) res as
   ⟨aux [] [] s.data⟩
@@ -27,49 +27,14 @@ protected def Literal.toString : Literal → String
   | float f => removeRightmostZeros $ toString f
   | str   s => s
 
-def Lambda.toString (l : Lambda) : String :=
-  "«function»"
-
-protected def Value.toString : Value → String
-  | nil     => "«nil»"
-  | lit  l  => l.toString
-  | list l  => toString $ l.map Literal.toString
-  | lam  l  => l.toString
-
 def Lambda.typeStr : Lambda → String
   | mk l .. => (l.foldl (init := "") fun acc _ => acc ++ "_ → ") ++ "_"
 
 def Value.typeStr : Value → String
-  | nil     => "nil"
-  | lit   l => l.typeStr
-  | list  _ => "list"
-  | lam   l => l.typeStr
-
-mutual
-
-  partial def unfoldExpressions (es : NEList Expression) : String :=
-    (es.map fun e => Expression.toString e).unfoldStrings
-
-  protected partial def Expression.toString : Expression → String
-    | var  n    => n
-    | lit  l    => l.toString
-    | list l    => toString $ l.map Literal.toString
-    | lam  l    => l.toString
-    | app  e es => s!"({Expression.toString e} {unfoldExpressions es})"
-    | .unOp  .not p   =>s!"(! {Expression.toString p})"
-    | .binOp .add l r =>s!"({Expression.toString l} + {Expression.toString r})"
-    | .binOp .mul l r =>s!"({Expression.toString l} * {Expression.toString r})"
-    | .binOp .eq  l r =>s!"({Expression.toString l} = {Expression.toString r})"
-    | .binOp .ne  l r =>s!"({Expression.toString l} != {Expression.toString r})"
-    | .binOp .lt  l r =>s!"({Expression.toString l} < {Expression.toString r})"
-    | .binOp .le  l r =>s!"({Expression.toString l} <= {Expression.toString r})"
-    | .binOp .gt  l r =>s!"({Expression.toString l} > {Expression.toString r})"
-    | .binOp .ge  l r =>s!"({Expression.toString l} >= {Expression.toString r})"
-
-end
-
-instance : ToString Expression := ⟨Expression.toString⟩
-instance : ToString Value      := ⟨Value.toString⟩
+  | nil    => "nil"
+  | lit  l => l.typeStr
+  | list _ => "list"
+  | lam  l => l.typeStr
 
 def Literal.eq : Literal → Literal → Bool
   | bool  bₗ, bool  bᵣ => bₗ == bᵣ
@@ -186,46 +151,54 @@ def Value.binOp : Value → Value → BinOp → Except String Value
   | l, r, .eq  => l.eq r
   | l, r, .ne  => l.ne r
 
-def Value.toProgram : Value → Program
-  | nil     => .skip
-  | lit   l => .eval $ .lit l
-  | list  l => .eval $ .list l
-  | lam   l => .eval $ .lam l
+mutual
 
-def Program.getCurryNames? : Program → Option (NEList String)
-  | eval (.app _ ns )                  => none
-  | seq (decl _ (eval (.app _ ns ))) _ => none
-  | _                                  => none
+  partial def unfoldExpressions (es : NEList Expression) : String :=
+    (es.map exprToString).unfoldStrings
 
-def Program.isSequence : Program → Bool
-  | seq .. => true
-  | _      => false
+  partial def exprToString : Expression → String
+    | .var  n    => n
+    | .lit  l    => l.toString
+    | .list l    => toString $ l.map Literal.toString
+    | .lam  _    => "«function»"
+    | .app  e es => s!"({exprToString e} {unfoldExpressions es})"
+    | .unOp  .not e   => s!"!{exprToString e}"
+    | .binOp .add l r => s!"({exprToString l} + {exprToString r})"
+    | .binOp .mul l r => s!"({exprToString l} * {exprToString r})"
+    | .binOp .eq  l r => s!"({exprToString l} = {exprToString r})"
+    | .binOp .ne  l r => s!"({exprToString l} != {exprToString r})"
+    | .binOp .lt  l r => s!"({exprToString l} < {exprToString r})"
+    | .binOp .le  l r => s!"({exprToString l} <= {exprToString r})"
+    | .binOp .gt  l r => s!"({exprToString l} > {exprToString r})"
+    | .binOp .ge  l r => s!"({exprToString l} >= {exprToString r})"
 
-def blank (n : Nat) : String :=
-  let rec blankAux (cs : List Char) : Nat → List Char
-    | 0     => cs
-    | n + 1 => ' ' :: ' ' :: (blankAux cs n)
-  ⟨blankAux [] n⟩
+end
 
-def Program.toString (p : Program) : String :=
-  let rec aux (l : Nat) : Program → String
-    | skip              => s!"{blank l}skip"
-    | seq    p q   =>
-      s!"{blank (l-2)}{aux l p}\n{aux l q}"
-    | decl n p   =>
-      let pString := if p.isSequence
-        then s!"\n{aux (l+2) p}"
-        else s!" {aux (l-2) p}"
-      match p.getCurryNames? with
-      | none    => s!"{blank l}{n} :=" ++ pString
-      | some ns => s!"{blank l}{n} {ns.unfoldStrings} :=" ++ pString
-    | eval  e     => s!"{blank l}{e}"
-    | loop  p? p   =>
-      s!"{blank l}while {p?.toString} do\n{aux (l+2) p}"
-    | fork      p? p q =>
-      s!"{blank l}if {p?.toString} then\n{aux (l+2) p}\n" ++
-        s!"else\n{aux (l+2) q}"
-    | print e => s!"{blank l}!print {e}"
-  aux 0 p
+instance : ToString Expression := ⟨exprToString⟩
 
-instance : ToString Program := ⟨Program.toString⟩
+def valToString : Value → String
+    | .nil    => "«nil»"
+    | .lit  l => l.toString
+    | .list l => toString $ l.map Literal.toString
+    | .lam  _ => "«function»"
+
+instance : ToString Value := ⟨valToString⟩
+
+protected def Context.toString (c : Context) : String :=
+  c.toList.foldl (init := "")
+    fun acc (n, val) => acc ++ s!"{n}:\t{val}\n"
+
+instance : ToString Context := ⟨Context.toString⟩
+
+def ErrorType.toString : ErrorType → String
+  | name    => "NameError"
+  | type    => "TypeError"
+  | runTime => "RunTimeError"
+
+instance : ToString ErrorType := ⟨ErrorType.toString⟩
+
+def Result.toString : Result → String
+  | val v   => valToString v
+  | err t m => s!"{t}: {m}"
+
+instance : ToString Result := ⟨Result.toString⟩
