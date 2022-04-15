@@ -51,23 +51,23 @@ def NEList.isEqToList : NEList α → List α → Prop
   | .uno  a   , [b]     => a = b
   | _,          _       => False
 
-theorem ListToNEListIsEqList {a : α} {as : List α} :
+theorem NEList.ListToNEListIsEqList {a : α} {as : List α} :
     (as.toNEList a).isEqToList (a :: as) := by
   induction as with
-  | nil            => simp only [NEList.isEqToList]
+  | nil            => simp only [isEqToList]
   | cons a' as' hi =>
     cases as' with
-    | nil      => simp only [NEList.isEqToList]
-    | cons _ _ => simp [NEList.isEqToList] at hi ⊢; exact hi
+    | nil      => simp only [isEqToList]
+    | cons _ _ => simp [isEqToList] at hi ⊢; exact hi
 
-theorem NEListToListEqList {a : α} {as : List α} :
+theorem NEList.toListEqList {a : α} {as : List α} :
     (as.toNEList a).toList = a :: as := by
   induction as with
-  | nil           => simp only [NEList.toList]
+  | nil           => simp only [toList]
   | cons _ as' hi =>
     cases as' with
-    | nil      => simp only [NEList.toList]
-    | cons _ _ => simp [NEList.toList] at hi ⊢; exact hi
+    | nil      => simp only [toList]
+    | cons _ _ => simp [toList] at hi ⊢; exact hi
 
 theorem eqIffBEq [BEq α] [LawfulBEq α] {a b : α} : a == b ↔ a = b := by
   constructor
@@ -96,28 +96,28 @@ theorem notBEqOfNotEq [BEq α] [LawfulBEq α] {a x : α} (h : ¬a = x) :
   · simp [eq_of_beq h'] at h
   · exact h'
 
-theorem eqOfSingletonListContains [BEq α] [LawfulBEq α] {a x : α} :
-    List.contains [a] x ↔ a == x := by
+theorem List.eqOfSingletonListContains [BEq α] [LawfulBEq α] {a x : α} :
+    [a].contains x ↔ a == x := by
   constructor
   · intro h
-    simp [List.contains, List.elem] at h
+    simp [contains, elem] at h
     by_cases h' : a = x
     · simp [h']
     · simp [notBEqOfNotEq h'] at h
   · intro h
-    rw [List.contains, List.elem]
+    rw [contains, elem]
     have : x == a := by
       rw [eqIffBEq] at h ⊢
       exact eqRfl.mpr h
     simp only [this]
 
-theorem NEListContainsOfListContains [BEq α] [LawfulBEq α] {l : NEList α}
+theorem NEList.containsOfListContains [BEq α] [LawfulBEq α] {l : NEList α}
     (h : l.toList.contains x) : l.contains x := by
   induction l with
-  | uno  _      => exact eqOfSingletonListContains.mp h
+  | uno  _      => exact List.eqOfSingletonListContains.mp h
   | cons a _ hi =>
-    rw [NEList.toList] at h
-    simp [NEList.contains]
+    rw [toList] at h
+    simp [contains]
     by_cases h' : a == x
     · exact Or.inl h'
     · rw [List.contains] at h
@@ -127,13 +127,13 @@ theorem NEListContainsOfListContains [BEq α] [LawfulBEq α] {l : NEList α}
       simp only [this, List.elem] at h
       exact Or.inr $ hi h
 
-theorem ListContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
+theorem NEList.listContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
     (h : l.contains x) : l.toList.contains x := by
   induction l with
-  | uno  _      => exact eqOfSingletonListContains.mpr h
+  | uno  _      => exact List.eqOfSingletonListContains.mpr h
   | cons a _ hi =>
-    rw [NEList.toList]
-    simp [NEList.contains] at h
+    rw [toList]
+    simp [contains] at h
     cases h with | _ h => ?_
     · simp [eqIffBEq.mp h, List.contains, List.elem]
     · rw [List.contains, List.elem]
@@ -141,12 +141,43 @@ theorem ListContainsOfNEListContains [BEq α] [LawfulBEq α] {l : NEList α}
       · rw [h']
       · simp only [h', hi h]
 
-theorem NEListContainsIffListContains [BEq α] [LawfulBEq α] {l : NEList α} :
+theorem NEList.containsIffListContains [BEq α] [LawfulBEq α] {l : NEList α} :
     l.contains x ↔ l.toList.contains x :=
-  ⟨ListContainsOfNEListContains, NEListContainsOfListContains⟩
+  ⟨listContainsOfNEListContains, containsOfListContains⟩
 
-theorem NEListNoDupIffToListNoDup [BEq α] {l : NEList α} :
-  l.noDup ↔ l.toList.noDup := sorry
+theorem NEList.notContainsIffListNotContains [BEq α] [LawfulBEq α]
+    {l : NEList α} : l.contains x = false ↔ l.toList.contains x = false := by
+  constructor
+  · intro h
+    by_cases h' : List.contains (toList l) x
+    · simp [containsIffListContains.mpr h'] at h
+    · simp [h']
+  · intro h
+    by_cases h' : l.contains x
+    · simp [containsIffListContains.mp h'] at h
+    · simp [h']
 
-theorem NEListLengthEqToListLength [BEq α] {l : NEList α} :
-  l.length = l.toList.length := sorry
+theorem NEList.noDupIffToListNoDup [BEq α] [LawfulBEq α] {l : NEList α} :
+    l.noDup ↔ l.toList.noDup := by
+  constructor
+  · intro h
+    induction l with
+    | uno _ => simp [toList, noDup, List.noDup, List.contains, List.elem]
+    | cons _ _ hi =>
+      simp [noDup] at h
+      simp [toList, List.noDup]
+      exact ⟨(notContainsIffListNotContains.mp h.1), (hi h.2)⟩
+  · intro h
+    induction l with
+    | uno _ => simp [toList, noDup, List.noDup, List.contains, List.elem]
+    | cons _ _ hi =>
+      simp [List.noDup] at h
+      simp [noDup]
+      exact ⟨(notContainsIffListNotContains.mpr h.1), (hi h.2)⟩
+
+theorem NEList.lengthEqToListLength [BEq α] {l : NEList α} :
+    l.length = l.toList.length := by
+  induction l with
+  | uno _ => simp [length, toList, List.length]
+  | cons a as hi =>
+    simp [length, toList, List.length, hi, Nat.add_comm]
