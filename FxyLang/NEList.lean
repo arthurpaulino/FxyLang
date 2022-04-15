@@ -150,26 +150,26 @@ theorem NEList.notContainsIffListNotContains [BEq α] [LawfulBEq α]
   constructor
   · intro h
     by_cases h' : List.contains (toList l) x
-    · simp [containsIffListContains.mpr h'] at h
-    · simp [h']
+    · simp only [containsIffListContains.mpr h'] at h
+    · simp only [h']
   · intro h
     by_cases h' : l.contains x
-    · simp [containsIffListContains.mp h'] at h
-    · simp [h']
+    · simp only [containsIffListContains.mp h'] at h
+    · simp only [h']
 
 theorem NEList.noDupIffToListNoDup [BEq α] [LawfulBEq α] {l : NEList α} :
     l.noDup ↔ l.toList.noDup := by
   constructor
   · intro h
     induction l with
-    | uno _ => simp [toList, noDup, List.noDup, List.contains, List.elem]
+    | uno _ => simp [noDup, List.noDup, List.contains, List.elem]
     | cons _ _ hi =>
       simp [noDup] at h
       simp [toList, List.noDup]
       exact ⟨(notContainsIffListNotContains.mp h.1), (hi h.2)⟩
   · intro h
     induction l with
-    | uno _ => simp [toList, noDup, List.noDup, List.contains, List.elem]
+    | uno _ => rw [noDup]
     | cons _ _ hi =>
       simp [List.noDup] at h
       simp [noDup]
@@ -178,6 +178,6 @@ theorem NEList.noDupIffToListNoDup [BEq α] [LawfulBEq α] {l : NEList α} :
 theorem NEList.lengthEqToListLength [BEq α] {l : NEList α} :
     l.length = l.toList.length := by
   induction l with
-  | uno _ => simp [length, toList, List.length]
+  | uno _ => simp [length, toList]
   | cons a as hi =>
-    simp [length, toList, List.length, hi, Nat.add_comm]
+    simp [length, toList, hi, Nat.add_comm]
