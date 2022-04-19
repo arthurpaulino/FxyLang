@@ -4,7 +4,7 @@
   Authors: Arthur Paulino
 -/
 
-import FxyLang.NEList
+import FxyLang.Implementation.NEList
 import Std
 
 inductive Literal

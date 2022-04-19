@@ -4,7 +4,7 @@
   Authors: Arthur Paulino
 -/
 
-import FxyLang.ASTUtilities
+import FxyLang.Implementation.ASTUtilities
 
 def cantEvalAsBool (e : Expression) (v : Value) : String :=
   s!"I can't evaluate '{e}' as a 'bool' because it reduces to '{v}', of " ++

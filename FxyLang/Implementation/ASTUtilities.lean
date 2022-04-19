@@ -4,7 +4,7 @@
   Authors: Arthur Paulino
 -/
 
-import FxyLang.AST
+import FxyLang.Implementation.AST
 
 def Literal.typeStr : Literal → String
   | bool  _ => "bool"

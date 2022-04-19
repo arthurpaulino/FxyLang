@@ -5,8 +5,8 @@
 -/
 
 import Lean
-import FxyLang.Execution
-import FxyLang.Syntax
+import FxyLang.Implementation.Execution
+import FxyLang.Implementation.Syntax
 
 def Program.getBindersNames? : Program → Option (NEList String)
   | eval (.lam $ .mk ns ..)                    => some ns
