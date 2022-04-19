@@ -87,4 +87,21 @@ theorem State.declClean (h : (prog (.decl nm p) c k) ↠ (done v c')) :
   cases h with | intro n h =>
   sorry
 
+theorem Nat.succAddEqAddSucc : a + 1 + b = (a + b).succ := sorry
+
+theorem State.stepNComp : (s¨n₁)¨n₂ = s¨(n₁ + n₂) := by
+  induction n₁ generalizing s n₂ with
+  | zero => simp [stepN]
+  | succ n hi =>
+    have := @hi (s¨1) n₂
+    simp only [stepN] at this
+    rw [stepN, this, Nat.succAddEqAddSucc, stepN]
+
+theorem State.reachTransitive (h₁₂ : s₁ ↠ s₂) (h₂₃ : s₂ ↠ s₃) : s₁ ↠ s₃ := by
+  simp [reaches] at *
+  cases h₁₂ with | intro n₁₂ h₁₂ =>
+  cases h₂₃ with | intro n₂₃ h₂₃ =>
+  rw [← h₁₂, stepNComp] at h₂₃
+  exact ⟨n₁₂ + n₂₃, h₂₃⟩
+
 theorem State.continuous : ∃ n, (s¨n).isEnd ∨ (s¨n).isProg := sorry
