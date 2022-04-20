@@ -45,8 +45,3 @@ def NEList.noDup [BEq α] : NEList α → Bool
 def NEList.toList : NEList α → List α
   | uno  a   => [a]
   | cons a b => a :: b.toList
-
-def NEList.isEqToList : NEList α → List α → Prop
-  | .cons a as, b :: bs => a = b ∧ isEqToList as bs
-  | .uno  a   , [b]     => a = b
-  | _,          _       => False

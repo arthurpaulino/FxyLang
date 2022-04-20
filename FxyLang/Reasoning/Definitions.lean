@@ -6,12 +6,6 @@
 
 import FxyLang.Implementation.Execution
 
-def Context.equiv (cₗ cᵣ : Context) : Prop :=
-  ∀ n, cₗ[n] = cᵣ[n]
-
-def Context.diffBy (cₗ cᵣ : Context) (nm : String) : Prop :=
-  ∀ nm', nm' ≠ nm → cₗ[nm'] = cᵣ[nm']
-
 def State.ctx : State → Context
   | ret   _ c _ => c
   | prog  _ c _ => c
@@ -19,14 +13,14 @@ def State.ctx : State → Context
   | error _ c _ => c
   | done  _ c   => c
 
-def State.isProg : State → Prop
-  | prog .. => True
-  | _       => False
+def State.isProg : State → Bool
+  | prog .. => true
+  | _       => false
 
-def State.isEnd : State → Prop
-  | done  .. => True
-  | error .. => True
-  | _        => False
+def State.isEnd : State → Bool
+  | done  .. => true
+  | error .. => true
+  | _        => false
 
 def State.stepN : State → Nat → State
   | s, 0     => s
@@ -35,63 +29,25 @@ def State.stepN : State → Nat → State
 def State.reaches (s₁ s₂ : State) : Prop :=
   ∃ n, s₁.stepN n = s₂
 
-notation cₗ " ≃ " cᵣ:21 => Context.equiv cₗ cᵣ 
-notation cₗ " ≈ " cᵣ " | " nm => Context.diffBy cₗ cᵣ nm
-notation s  "¨" n:51 => State.stepN s n
+notation s  "^" "[" n:51 "]" => State.stepN s n
 notation s₁ " ↠ " s₂ => State.reaches s₁ s₂
 
-def Program.terminates (p : Program) (c : Context) (k : Continuation) : Prop :=
-  ∃ n, ((State.prog p c k)¨n).isEnd
+def bigStep (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
+  ∀ k, .prog p c k ↠ .ret v c' k
 
-def State.terminates (s : State) : Prop :=
-  ∃ n, (s¨n).isEnd
+notation "(" c ", " p ")" " » " "(" c' ", " v ")" => bigStep c p c' v
 
-theorem Context.equivSelf {c : Context} : c ≃ c :=
-  fun _ => rfl
+theorem State.skipClean : (c, .skip) » (c, .nil) :=
+  fun _ => ⟨1 , by simp only [stepN, step]⟩
 
--- theorem Context.eqOfEquiv {cₗ cᵣ : Context} (h : cₗ ≃ cᵣ) : cₗ = cᵣ := sorry
+theorem State.declClean :
+    (c, p) » (c', v) → (c, .decl nm p) » (c.insert nm v, nil) := sorry
 
--- theorem Context.equivIff {cₗ cᵣ : Context} : cₗ ≃ cᵣ ↔ cₗ = cᵣ := by
---   constructor
---   · intro h; exact eqOfEquiv h
---   · intro h; rw [h]; exact equivSelf
-
-theorem Context.eqComm {cₗ cᵣ : Context} (h : cₗ ≃ cᵣ) : cᵣ ≃ cₗ :=
-  fun _ => by rw [h]
-
-theorem Context.diffBySelf : c ≈ c | nm :=
-  fun _ _ => rfl
-
-open Std.HashMap in
-theorem Context.diffByOfInsert (h : c' = c.insert nm v) : c' ≈ c | nm := by
-  intro nm' hne
-  rw [h]
-  simp [getOp, find?]
-  sorry
-
-theorem State.skipStep (h : s = (prog .skip c k).step) : s.ctx ≃ c := by
-  have : s.ctx = c := by rw [h, step, ctx]
-  simp only [this, Context.equivSelf]
-
-theorem State.skipClean : (prog .skip c .exit) ↠ (done .nil c) :=
-  ⟨2 , by simp only [stepN, step]⟩
-
-theorem State.declStep (h : s = (prog (.decl nm p) c k).step) :
-    s.ctx ≃ c := by
-  rw [h]
-  simp only [ctx, step]
-  exact Context.equivSelf
-
-theorem State.declClean (h : (prog (.decl nm p) c k) ↠ (done v c')) :
-    c' ≈ c | nm := by
-  cases h with | intro n h =>
-  sorry
-
-theorem State.stepNComp : (s¨n₁)¨n₂ = s¨(n₁ + n₂) := by
+theorem State.stepNComp : (s^[n₁])^[n₂] = s^[n₁ + n₂] := by
   induction n₁ generalizing s with
   | zero => simp [stepN]
   | succ n hi =>
-    have := @hi (s¨1)
+    have := @hi (s^[1])
     simp only [stepN] at this
     rw [stepN, this]
     have : n.succ + n₂ = (n + n₂).succ := by
@@ -107,7 +63,7 @@ theorem State.reachTransitive (h₁₂ : s₁ ↠ s₂) (h₂₃ : s₂ ↠ s₃
   rw [← h₁₂, stepNComp] at h₂₃
   exact ⟨n₁₂ + n₂₃, h₂₃⟩
 
-theorem State.progress : ∃ n, (s¨n).isEnd ∨ (s¨n).isProg := by
+theorem State.progress : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
   cases s with
   | prog  => exact ⟨0, by simp [stepN, isProg]⟩
   | done  => exact ⟨0, by simp [stepN, isEnd]⟩

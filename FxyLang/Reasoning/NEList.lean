@@ -6,6 +6,11 @@
 
 import FxyLang.Implementation.NEList
 
+def NEList.isEqToList : NEList α → List α → Prop
+  | .cons a as, b :: bs => a = b ∧ isEqToList as bs
+  | .uno  a   , [b]     => a = b
+  | _,          _       => False
+
 theorem NEList.ListToNEListIsEqList {a : α} {as : List α} :
     (as.toNEList a).isEqToList (a :: as) := by
   induction as with
