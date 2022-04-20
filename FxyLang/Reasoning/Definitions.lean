@@ -46,8 +46,8 @@ def Program.terminates (p : Program) (c : Context) (k : Continuation) : Prop :=
 def State.terminates (s : State) : Prop :=
   ∃ n, (s¨n).isEnd
 
-theorem Context.equivSelf {c : Context} : c ≃ c := by
-  intro _; rfl
+theorem Context.equivSelf {c : Context} : c ≃ c :=
+  fun _ => rfl
 
 -- theorem Context.eqOfEquiv {cₗ cᵣ : Context} (h : cₗ ≃ cᵣ) : cₗ = cᵣ := sorry
 
@@ -56,11 +56,11 @@ theorem Context.equivSelf {c : Context} : c ≃ c := by
 --   · intro h; exact eqOfEquiv h
 --   · intro h; rw [h]; exact equivSelf
 
-theorem Context.eqComm {cₗ cᵣ : Context} (h : cₗ ≃ cᵣ) : cᵣ ≃ cₗ := by
-  intro _; rw [h]
+theorem Context.eqComm {cₗ cᵣ : Context} (h : cₗ ≃ cᵣ) : cᵣ ≃ cₗ :=
+  fun _ => by rw [h]
 
-theorem Context.diffBySelf : c ≈ c | nm := by
-  intro _ _; rfl
+theorem Context.diffBySelf : c ≈ c | nm :=
+  fun _ _ => rfl
 
 open Std.HashMap in
 theorem Context.diffByOfInsert (h : c' = c.insert nm v) : c' ≈ c | nm := by
@@ -73,8 +73,8 @@ theorem State.skipStep (h : s = (prog .skip c k).step) : s.ctx ≃ c := by
   have : s.ctx = c := by rw [h, step, ctx]
   simp only [this, Context.equivSelf]
 
-theorem State.skipClean : (prog .skip c .exit) ↠ (done .nil c) := by
-  refine ⟨2 , by simp only [stepN, step]⟩
+theorem State.skipClean : (prog .skip c .exit) ↠ (done .nil c) :=
+  ⟨2 , by simp only [stepN, step]⟩
 
 theorem State.declStep (h : s = (prog (.decl nm p) c k).step) :
     s.ctx ≃ c := by
@@ -98,6 +98,8 @@ theorem State.stepNComp : (s¨n₁)¨n₂ = s¨(n₁ + n₂) := by
       simp only [Nat.add_comm, Nat.add_assoc, Nat.add_left_comm]; rfl
     rw [this, stepN]
 
+theorem State.reachSelf : s ↠ s := ⟨0, by rw [stepN]⟩
+
 theorem State.reachTransitive (h₁₂ : s₁ ↠ s₂) (h₂₃ : s₂ ↠ s₃) : s₁ ↠ s₃ := by
   simp [reaches] at *
   cases h₁₂ with | intro n₁₂ h₁₂ =>
@@ -105,4 +107,10 @@ theorem State.reachTransitive (h₁₂ : s₁ ↠ s₂) (h₂₃ : s₂ ↠ s₃
   rw [← h₁₂, stepNComp] at h₂₃
   exact ⟨n₁₂ + n₂₃, h₂₃⟩
 
-theorem State.continuous : ∃ n, (s¨n).isEnd ∨ (s¨n).isProg := sorry
+theorem State.progress : ∃ n, (s¨n).isEnd ∨ (s¨n).isProg := by
+  cases s with
+  | prog  => exact ⟨0, by simp [stepN, isProg]⟩
+  | done  => exact ⟨0, by simp [stepN, isEnd]⟩
+  | error => exact ⟨0, by simp [stepN, isEnd]⟩
+  | ret  v c k => sorry
+  | expr e c k => sorry
