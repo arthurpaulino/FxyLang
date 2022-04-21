@@ -33,16 +33,28 @@ notation "(" c ", " p ")" " » " "(" c' ", " v ")" => bigStep c p c' v
 theorem State.skip : (c, .skip) » (c, .nil) :=
   fun _ => ⟨1 , by simp only [stepN, step]⟩
 
+macro "inhabit " hyp:ident " with " n:ident " : " ty:ident : tactic =>
+  `(tactic| have $n : $ty := default; specialize $hyp $n)
+
 theorem State.decl : (c, .decl nm p) » (c', v) → c = c.insert nm v := by
   sorry
 
+theorem State.qqq (h : ret v c k^[n] = ret v' c' k) : c = c' := sorry
+
 theorem State.eval : (c, .eval e) » (c', v) → c = c' := by
   intro h
-  simp only [bigStep, reaches] at h
-  have k : Continuation := default
-  specialize h k
+  inhabit h with k : Continuation
   cases h with | intro n h =>
-  sorry
+  cases n with
+  | zero => simp only [step, stepN] at h
+  | succ n =>
+    cases e with
+    | lit l =>
+      cases n with
+      | zero => simp only [step, stepN] at h
+      | succ n =>
+        exact qqq h
+    | _ => sorry
 
 theorem State.print : (c, .print e) » (c', v) → c = c' := by
   intro h

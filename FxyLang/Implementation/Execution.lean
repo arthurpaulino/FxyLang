@@ -110,6 +110,7 @@ inductive Continuation
   | app    : Expression → NEList Expression → Continuation → Continuation
   | block  : Context → Continuation → Continuation
   | print  : Continuation → Continuation
+  deriving Inhabited
 
 inductive State
   | ret   : Value      → Context → Continuation → State
