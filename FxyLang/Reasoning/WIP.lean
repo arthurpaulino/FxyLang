@@ -5,6 +5,7 @@
 -/
 
 import FxyLang.Implementation.Execution
+import Lean
 
 def State.isProg : State → Bool
   | prog .. => true
@@ -34,27 +35,52 @@ theorem State.skip : (c, .skip) » (c, .nil) :=
   fun _ => ⟨1 , by simp only [stepN, step]⟩
 
 macro "inhabit " hyp:ident " with " n:ident " : " ty:ident : tactic =>
-  `(tactic| have $n : $ty := default; specialize $hyp $n)
+  `(tactic| have $n:ident : $ty:ident := default;
+            specialize $hyp:ident $n:ident)
+
+set_option hygiene false in
+macro "next_step " n:ident " with " h:ident : tactic =>
+  `(tactic| cases $n:ident with
+            | zero => simp only [step, stepN] at $h:ident
+            | succ $n:ident => ?_)
 
 theorem State.decl : (c, .decl nm p) » (c', v) → c = c.insert nm v := by
   sorry
 
-theorem State.qqq (h : ret v c k^[n] = ret v' c' k) : c = c' := sorry
+theorem State.doneLoop : done v c^[n] = done v c := by
+  induction n with
+  | zero      => rw [stepN]
+  | succ _ hi => rw [stepN, step]; exact hi
+
+theorem State.endWithSameCont (h : ret v c k^[n] = ret v' c' k) : c = c' := by
+  cases k with
+  | exit =>
+    induction n with
+    | zero => simp [step, stepN] at h; exact h.2
+    | succ n hi =>
+      simp only [stepN, step] at h
+      rw [doneLoop] at h
+      simp at h
+  | seq p k' =>
+    induction n with
+    | zero => simp [step, stepN] at h; exact h.2
+    | succ n hi =>
+      sorry
+  | _ => sorry
 
 theorem State.eval : (c, .eval e) » (c', v) → c = c' := by
   intro h
   inhabit h with k : Continuation
   cases h with | intro n h =>
-  cases n with
-  | zero => simp only [step, stepN] at h
-  | succ n =>
-    cases e with
-    | lit l =>
-      cases n with
-      | zero => simp only [step, stepN] at h
-      | succ n =>
-        exact qqq h
-    | _ => sorry
+  next_step n with h
+  cases e with
+  | lit _ =>
+    next_step n with h
+    exact endWithSameCont h
+  | lam _ =>
+    next_step n with h
+    exact endWithSameCont h
+  | _ => sorry
 
 theorem State.print : (c, .print e) » (c', v) → c = c' := by
   intro h
