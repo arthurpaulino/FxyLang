@@ -6,13 +6,6 @@
 
 import FxyLang.Implementation.Execution
 
-def State.ctx : State → Context
-  | ret   _ c _ => c
-  | prog  _ c _ => c
-  | expr  _ c _ => c
-  | error _ c _ => c
-  | done  _ c   => c
-
 def State.isProg : State → Bool
   | prog .. => true
   | _       => false
@@ -29,7 +22,7 @@ def State.stepN : State → Nat → State
 def State.reaches (s₁ s₂ : State) : Prop :=
   ∃ n, s₁.stepN n = s₂
 
-notation s  "^" "[" n:51 "]" => State.stepN s n
+notation s  "^" "[" n "]" => State.stepN s n
 notation s₁ " ↠ " s₂ => State.reaches s₁ s₂
 
 def bigStep (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
@@ -40,11 +33,18 @@ notation "(" c ", " p ")" " » " "(" c' ", " v ")" => bigStep c p c' v
 theorem State.skip : (c, .skip) » (c, .nil) :=
   fun _ => ⟨1 , by simp only [stepN, step]⟩
 
-theorem State.decl :
-    (c, p) » (c', v) → (c, .decl nm p) » (c.insert nm v, nil) := by
+theorem State.decl : (c, .decl nm p) » (c', v) → c = c.insert nm v := by
   sorry
 
 theorem State.eval : (c, .eval e) » (c', v) → c = c' := by
+  intro h
+  simp only [bigStep, reaches] at h
+  have k : Continuation := default
+  specialize h k
+  cases h with | intro n h =>
+  sorry
+
+theorem State.print : (c, .print e) » (c', v) → c = c' := by
   intro h
   rw [bigStep] at h
   sorry
