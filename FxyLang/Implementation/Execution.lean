@@ -42,59 +42,59 @@ theorem noDupOfConsumeNoDup
 
 mutual
 
-  partial def reduce (ctx : Context) : Expression → Result
+  partial def reduce (c : Context) : Expression → Result
     | .lit  l => .val $ .lit  l
     | .list l => .val $ .list l
     | .lam  l => .val $ .lam  l
-    | .var  n => match ctx[n] with
+    | .var  n => match c[n] with
       | none   => .err .name $ notFound n
       | some v => .val $ v
-    | .app e es => match reduce ctx e with
+    | .app e es => match reduce c e with
       | .val $ .lam $ .mk ns h p => match h' : consume p ns es with
         | some (some l, p) => .val $ .lam $ .mk l (noDupOfConsumeNoDup h h') p
-        | some (none, p) => (p.run! ctx).2
+        | some (none, p) => (p.run! c).2
         | none => .err .runTime $ wrongNParameters e ns.length es.length
       | .val v                   => .err .type $ notAFunction e v
       | er@(.err ..)             => er
-    | .unOp o e => match reduce ctx e with
+    | .unOp o e => match reduce c e with
       | .val v      => match v.unOp o with
         | .ok    v => .val v
         | .error m => .err .type m
       | er@(.err ..) => er
-    | .binOp o eₗ eᵣ => match (reduce ctx eₗ, reduce ctx eᵣ) with
+    | .binOp o eₗ eᵣ => match (reduce c eₗ, reduce c eᵣ) with
       | (.val vₗ, .val vᵣ) => match vₗ.binOp vᵣ o with
         | .ok    v => .val v
         | .error m => .err .type m
       | (er@(.err ..), _)        => er
       | (_, er@(.err ..))        => er
 
-  partial def Program.run! (ctx : Context := default) :
+  partial def Program.run! (c : Context := default) :
       Program → Context × Result
-    | skip      => (ctx, .val .nil)
-    | eval e => (ctx, (reduce ctx e))
+    | skip      => (c, .val .nil)
+    | eval e => (c, (reduce c e))
     | seq p₁ p₂ =>
-      let res := p₁.run! ctx
+      let res := p₁.run! c
       match res.2 with
       | .err .. => res
       | _       => p₂.run! res.1
-    | decl n p => match (p.run! ctx).2 with
-      | er@(.err ..) => (ctx, er)
-      | .val v => (ctx.insert n v, .val .nil)
-    | fork e pT pF => match reduce ctx e with
-      | .val $ .lit $ .bool b => if b then pT.run! ctx else pF.run! ctx
-      | .val v                => (ctx, .err .type $ cantEvalAsBool e v)
-      | er@(.err ..)          => (ctx, er)
-    | loop e p  => match reduce ctx e with
+    | decl n p => match (p.run! c).2 with
+      | er@(.err ..) => (c, er)
+      | .val v => (c.insert n v, .val .nil)
+    | fork e pT pF => match reduce c e with
+      | .val $ .lit $ .bool b => if b then pT.run! c else pF.run! c
+      | .val v                => (c, .err .type $ cantEvalAsBool e v)
+      | er@(.err ..)          => (c, er)
+    | loop e p  => match reduce c e with
       | .val $ .lit $ .bool b =>
-        if !b then (ctx, .val .nil) else
-          match p.run! ctx with
+        if !b then (c, .val .nil) else
+          match p.run! c with
           | er@(_, .err ..) => er
-          | (ctx, _)        => (loop e p).run! ctx
-      | .val v       => (ctx, .err .type $ cantEvalAsBool e v)
-      | er@(.err ..) => (ctx, er)
-    | print e   => match reduce ctx e with
-      | .val v       => dbg_trace v; (ctx, .val .nil)
-      | er@(.err ..) => (ctx, er)
+          | (c, _)        => (loop e p).run! c
+      | .val v       => (c, .err .type $ cantEvalAsBool e v)
+      | er@(.err ..) => (c, er)
+    | print e   => match reduce c e with
+      | .val v       => dbg_trace v; (c, .val .nil)
+      | er@(.err ..) => (c, er)
 
 end
 
@@ -120,55 +120,55 @@ inductive State
   | done  : Value      → Context → State
 
 def State.step : State → State
-  | prog .skip ctx k => ret .nil ctx k
-  | prog (.eval e) ctx k => expr e ctx k
-  | prog (.seq p₁ p₂) ctx k => prog p₁ ctx (.seq p₂ k)
-  | prog (.decl n p) ctx k => prog p ctx $ .block ctx (.decl n k)
-  | prog (.fork e pT pF) ctx k => expr e ctx (.fork e pT pF k)
-  | prog (.loop e p) ctx k => expr e ctx (.loop e p k)
-  | prog (.print e) ctx k => expr e ctx (.print k)
+  | prog .skip c k => ret .nil c k
+  | prog (.eval e) c k => expr e c k
+  | prog (.seq p₁ p₂) c k => prog p₁ c (.seq p₂ k)
+  | prog (.decl n p) c k => prog p c $ .block c (.decl n k)
+  | prog (.fork e pT pF) c k => expr e c (.fork e pT pF k)
+  | prog (.loop e p) c k => expr e c (.loop e p k)
+  | prog (.print e) c k => expr e c (.print k)
 
-  | expr (.lit l) ctx k => ret (.lit l) ctx k
-  | expr (.list l) ctx k => ret (.list l) ctx k
-  | expr (.var n) ctx k => match ctx[n] with
-    | none   => error .name ctx $ notFound n
-    | some v => ret v ctx k
-  | expr (.lam l) ctx k => ret (.lam l) ctx k
-  | expr (.app e es) ctx k => expr e ctx (.app e es k)
-  | expr (.unOp o e) ctx k => expr e ctx (.unOp o e k)
-  | expr (.binOp o e₁ e₂) ctx k => expr e₁ ctx (.binOp₁ o e₂ k)
+  | expr (.lit l) c k => ret (.lit l) c k
+  | expr (.list l) c k => ret (.list l) c k
+  | expr (.var n) c k => match c[n] with
+    | none   => error .name c $ notFound n
+    | some v => ret v c k
+  | expr (.lam l) c k => ret (.lam l) c k
+  | expr (.app e es) c k => expr e c (.app e es k)
+  | expr (.unOp o e) c k => expr e c (.unOp o e k)
+  | expr (.binOp o e₁ e₂) c k => expr e₁ c (.binOp₁ o e₂ k)
  
-  | ret v ctx .exit => done v ctx
-  | ret v ctx (.print k) => dbg_trace v; ret .nil ctx k
-  | ret _ ctx (.seq p k) => prog p ctx k
+  | ret v c .exit => done v c
+  | ret v c (.print k) => dbg_trace v; ret .nil c k
+  | ret _ c (.seq p k) => prog p c k
 
-  | ret v _ (.block ctx k) => ret v ctx k
+  | ret v _ (.block c k) => ret v c k
 
-  | ret v ctx (.app e es k) => match v with
+  | ret v c (.app e es k) => match v with
     | .lam $ .mk ns h p => match h' : consume p ns es with
       | some (some l, p) =>
-        ret (.lam $ .mk l (noDupOfConsumeNoDup h h') p) ctx k
-      | some (none, p) => prog p ctx (.block ctx k)
-      | none => error .runTime ctx $ wrongNParameters e ns.length es.length
-    | v                 => error .type ctx $ notAFunction e v
+        ret (.lam $ .mk l (noDupOfConsumeNoDup h h') p) c k
+      | some (none, p) => prog p c (.block c k)
+      | none => error .runTime c $ wrongNParameters e ns.length es.length
+    | v                 => error .type c $ notAFunction e v
  
-  | ret (.lit $ .bool true)  ctx (.fork _ pT _ k) => prog pT ctx k
-  | ret (.lit $ .bool false) ctx (.fork _ _ pF k) => prog pF ctx k
-  | ret v ctx (.fork e ..) => error .type ctx $ cantEvalAsBool e v
+  | ret (.lit $ .bool true)  c (.fork _ pT _ k) => prog pT c k
+  | ret (.lit $ .bool false) c (.fork _ _ pF k) => prog pF c k
+  | ret v c (.fork e ..) => error .type c $ cantEvalAsBool e v
 
-  | ret (.lit $ .bool true) ctx (.loop e p k) => prog (.seq p (.loop e p)) ctx k
-  | ret (.lit $ .bool false) ctx (.loop _ _ k) => ret .nil ctx k
-  | ret v ctx (.loop e ..) => error .type ctx $ cantEvalAsBool e v
+  | ret (.lit $ .bool true) c (.loop e p k) => prog (.seq p (.loop e p)) c k
+  | ret (.lit $ .bool false) c (.loop _ _ k) => ret .nil c k
+  | ret v c (.loop e ..) => error .type c $ cantEvalAsBool e v
 
-  | ret v ctx (.decl n k) => ret .nil (ctx.insert n v) k
+  | ret v c (.decl n k) => ret .nil (c.insert n v) k
 
-  | ret v ctx (.unOp o e k) => match v.unOp o with
-    | .error m => error .type ctx m
-    | .ok    v => ret v ctx k
-  | ret v1 ctx (.binOp₁ o e2 k) => expr e2 ctx (.binOp₂ o v1 k)
-  | ret v2 ctx (.binOp₂ o v1 k) => match v1.binOp v2 o with
-    | .error m => error .type ctx m
-    | .ok    v => ret v ctx k
+  | ret v c (.unOp o e k) => match v.unOp o with
+    | .error m => error .type c m
+    | .ok    v => ret v c k
+  | ret v₁ c (.binOp₁ o e₂ k) => expr e₂ c (.binOp₂ o v₁ k)
+  | ret v₂ c (.binOp₂ o v₁ k) => match v₁.binOp v₂ o with
+    | .error m => error .type c m
+    | .ok    v => ret v c k
 
   | s@(error ..) => s
   | s@(done ..)  => s
@@ -176,7 +176,7 @@ def State.step : State → State
 partial def Program.run (p : Program) : Context × Result :=
   let rec run' (s : State) : Context × Result :=
     match s.step with
-    | .error t ctx m => (ctx, .err t m)
-    | .done  v ctx   => (ctx, .val v)
-    | s              => run' s
+    | .error t c m => (c, .err t m)
+    | .done  v c   => (c, .val v)
+    | s            => run' s
   run' $ State.prog p default .exit

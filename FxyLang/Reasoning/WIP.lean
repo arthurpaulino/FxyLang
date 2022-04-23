@@ -43,11 +43,11 @@ macro "big_step " k:ident " with " n:ident " at " h:ident : tactic => do
 
 open Lean.Elab.Tactic in
 set_option hygiene false in
-elab "step_next " n:ident " at " h:ident : tactic => do
+elab "small_step " n:ident " at " h:ident : tactic => do
   evalTactic $ ←`(tactic| cases $n:ident with
                           | zero => simp [step, stepN] at $h:ident
                           | succ $n:ident => ?_)
-  evalTactic $ ← `(tactic| simp [step, stepN] at $h:ident)
+  evalTactic $ ←`(tactic| simp [step, stepN] at $h:ident)
 
 theorem State.skip : ⟦c, .skip⟧ » ⟦c, .nil⟧ :=
   fun _ => ⟨1 , by simp only [stepN, step]⟩
@@ -57,10 +57,10 @@ theorem State.decl (h : ⟦c, .decl nm p⟧ » ⟦c', v⟧) : c = c.insert nm v 
 
 theorem State.eval (h : ⟦c, .eval e⟧ » ⟦c', v⟧) : c = c' := by
   big_step k with n at h
-  step_next n at h
+  small_step n at h
   cases e with
   | lit l =>
-    step_next n at h
+    small_step n at h
     cases n with
     | zero =>
       simp [stepN, step] at h
@@ -104,8 +104,8 @@ theorem State.exprProgression :
     | seq   => exact ⟨2, by simp [stepN, step, isProg]⟩
     | decl  => sorry
     | print => sorry
-    | _ => sorry
-  | _ => sorry
+    | _     => sorry
+  | _     => sorry
 
 theorem State.progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
   cases s with
@@ -114,3 +114,37 @@ theorem State.progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
   | error => exact ⟨0, by simp [stepN,  isEnd]⟩
   | ret  v c k => exact retProgression
   | expr e c k => exact exprProgression
+
+-- def Continuation.extends (k₀ : Continuation) : Continuation → Prop
+--   | k@(seq _ k') => k'.extends k₀ → k.extends k₀
+--   | _ => sorry
+
+inductive Continuation.derives (k₀ : Continuation) : Continuation → Prop
+  | id   : derives k₀ k₀
+  | seq  : derives k₀ k → derives k₀ (.seq _ k)
+  | decl : derives k₀ k → derives k₀ (.decl _ k)
+  | fork : derives k₀ k → derives k₀ (.fork _ _ _ k)
+  | loop : derives k₀ k → derives k₀ (.loop _ _ k)
+
+def State.context : State → Context
+  | .ret   _ c _ => c
+  | .prog  _ c _ => c
+  | .expr  _ c _ => c
+  | .error _ c _ => c
+  | .done  _ c   => c
+
+def State.derives (k₀ : Continuation) : State → Prop
+| .ret  _ _ k => k₀.derives k
+| .prog _ _ k => k₀.derives k
+| .expr _ _ k => k₀.derives k
+| .error ..   => False
+| .done  ..   => False
+
+-- def State.reachesWhile (s₁ s₂ : State) (f : State → Prop) : Prop :=
+--   ∃ n, s₁.stepN n = s₂ ∧ ∀ i, i ≤ n → f (s₁.stepN i)
+
+def State.reachesWhile (s₁ s₂ : State) (f : State → Prop) : Prop :=
+  ∃ n, s₁.stepN n = s₂ ∧ ∀ i, i ≤ n → f (s₁.stepN i)
+
+def bigStep' (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
+  ∀ k, (State.prog p c k).reachesWhile (.ret v c' k) (·.derives k)
