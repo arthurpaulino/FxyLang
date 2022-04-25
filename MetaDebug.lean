@@ -142,6 +142,13 @@ partial def elabProgram : Syntax → TermElabM Expr
 
 elab ">>" ppLine p:programSeq ppLine "<<" : term => elabProgram p
 
+
+protected def Context.toString (c : _root_.Context) : String :=
+  c.toList.foldl (init := "")
+    fun acc (n, val) => acc ++ s!"{n}:\t{val}\n"
+
+instance : ToString _root_.Context := ⟨Context.toString⟩
+
 open Lean.Elab.Command Lean.Elab.Term in
 elab "#assert " x:term:60 " = " y:term:60 : command =>
   liftTermElabM `assert do

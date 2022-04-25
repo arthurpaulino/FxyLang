@@ -3,6 +3,11 @@ import FxyLang
 
 open Lean
 
+def ErrorType.toString : ErrorType → String
+  | name    => "NameError"
+  | type    => "TypeError"
+  | runTime => "RunTimeError"
+
 def run (f : String) (fast : Bool) : IO Unit := do
   let code ← IO.FS.readFile ⟨f⟩
   initSearchPath (← Lean.findSysroot) ["build/lib"]
@@ -10,7 +15,7 @@ def run (f : String) (fast : Bool) : IO Unit := do
   match ← parse code env with
   | (none    , p) =>
     match if fast then p.run! else p.run with
-    | (_, er@(.err ..)) => IO.eprintln er
+    | (_, .err t m) => IO.eprintln s!"{t.toString}: {m}"
     | _                 => return
   | (some msg, _) => IO.eprintln msg
 

@@ -183,22 +183,3 @@ def valToString : Value → String
     | .lam  _ => "«function»"
 
 instance : ToString Value := ⟨valToString⟩
-
-protected def Context.toString (c : Context) : String :=
-  c.toList.foldl (init := "")
-    fun acc (n, val) => acc ++ s!"{n}:\t{val}\n"
-
-instance : ToString Context := ⟨Context.toString⟩
-
-def ErrorType.toString : ErrorType → String
-  | name    => "NameError"
-  | type    => "TypeError"
-  | runTime => "RunTimeError"
-
-instance : ToString ErrorType := ⟨ErrorType.toString⟩
-
-def Result.toString : Result → String
-  | val v   => valToString v
-  | err t m => s!"{t}: {m}"
-
-instance : ToString Result := ⟨Result.toString⟩

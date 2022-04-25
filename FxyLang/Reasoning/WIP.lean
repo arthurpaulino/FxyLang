@@ -20,58 +20,7 @@ def State.stepN : State → Nat → State
   | s, 0     => s
   | s, n + 1 => s.step.stepN n
 
-def State.reaches (s₁ s₂ : State) : Prop :=
-  ∃ n, s₁.stepN n = s₂
-
-notation s  "^" "[" n "]" => State.stepN s n
-notation s₁ " ↠ " s₂ => State.reaches s₁ s₂
-
-def bigStep (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
-  ∀ k, .prog p c k ↠ .ret v c' k
-
-notation "⟦" c ", " p "⟧" " » " "⟦" c' ", " v "⟧" => bigStep c p c' v
-
-theorem State.doneLoop : done v c^[n] = done v c := by
-  induction n with
-  | zero      => rw [stepN]
-  | succ _ hi => rw [stepN, step]; exact hi
-
-macro "big_step " k:ident " with " n:ident " at " h:ident : tactic => do
-  `(tactic| have $k:ident : Continuation := default;
-            specialize $h:ident $k:ident;
-            cases $h:ident with | intro $n:ident $h:ident => ?_)
-
-open Lean.Elab.Tactic in
-set_option hygiene false in
-elab "small_step " n:ident " at " h:ident : tactic => do
-  evalTactic $ ←`(tactic| cases $n:ident with
-                          | zero => simp [step, stepN] at $h:ident
-                          | succ $n:ident => ?_)
-  evalTactic $ ←`(tactic| simp [step, stepN] at $h:ident)
-
-theorem State.skip : ⟦c, .skip⟧ » ⟦c, .nil⟧ :=
-  fun _ => ⟨1 , by simp only [stepN, step]⟩
-
-theorem State.decl (h : ⟦c, .decl nm p⟧ » ⟦c', v⟧) : c = c.insert nm v := by
-  sorry
-
-theorem State.eval (h : ⟦c, .eval e⟧ » ⟦c', v⟧) : c = c' := by
-  big_step k with n at h
-  small_step n at h
-  cases e with
-  | lit l =>
-    small_step n at h
-    cases n with
-    | zero =>
-      simp [stepN, step] at h
-      exact h.2
-    | succ n =>
-      simp [stepN] at h
-      sorry
-  | _ => sorry
-
-theorem State.print (h : ⟦c, .print e⟧ » ⟦c', v⟧) : c = c' := by
-  sorry
+notation s "^" "[" n "]" => State.stepN s n
 
 theorem State.stepNComp : (s^[n₁])^[n₂] = s^[n₁ + n₂] := by
   induction n₁ generalizing s with
@@ -84,16 +33,26 @@ theorem State.stepNComp : (s^[n₁])^[n₂] = s^[n₁ + n₂] := by
       simp only [Nat.add_comm, Nat.add_assoc, Nat.add_left_comm]; rfl
     rw [this, stepN]
 
-theorem State.reachTransitive (h₁₂ : s₁ ↠ s₂) (h₂₃ : s₂ ↠ s₃) : s₁ ↠ s₃ := by
-  simp [reaches] at *
-  cases h₁₂ with | intro n₁₂ h₁₂ =>
-  cases h₂₃ with | intro n₂₃ h₂₃ =>
-  rw [← h₁₂, stepNComp] at h₂₃
-  exact ⟨n₁₂ + n₂₃, h₂₃⟩
+theorem State.doneLoop : done v c^[n] = done v c := by
+  induction n with
+  | zero      => rw [stepN]
+  | succ _ hi => rw [stepN, step]; exact hi
+
+theorem State.errorLoop : error t v c^[n] = error t v c := by
+  induction n with
+  | zero      => rw [stepN]
+  | succ _ hi => rw [stepN, step]; exact hi
 
 theorem State.retProgression :
     ∃ n, (ret v c k^[n]).isEnd ∨ (ret v c k^[n]).isProg := by
-  sorry
+  cases k with
+  | exit => exact ⟨1, by simp [stepN, step, isEnd]⟩
+  | seq  => exact ⟨1, by simp [stepN, step, isProg]⟩
+  | decl =>
+    refine ⟨1, ?_⟩
+    simp [stepN, step]
+    sorry
+  | _ => sorry
 
 theorem State.exprProgression :
     ∃ n, (expr e c k^[n]).isEnd ∨ (expr e c k^[n]).isProg := by
@@ -102,12 +61,22 @@ theorem State.exprProgression :
     induction k with
     | exit  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq   => exact ⟨2, by simp [stepN, step, isProg]⟩
-    | decl  => sorry
-    | print => sorry
+    | decl _ k' hi => sorry
+    | print  k' hi => 
+      induction k' with
+      | exit => exact ⟨3, by simp [stepN, step, dbgTrace, isEnd]⟩
+      | seq  => exact ⟨3, by simp [stepN, step, dbgTrace, isProg]⟩
+      | decl nm k'' hi' =>
+        cases hi with | intro n hi =>
+        refine ⟨n+2, ?_⟩
+        simp [stepN, step, dbgTrace]
+        sorry
+      | _ => sorry
     | _     => sorry
   | _     => sorry
 
-theorem State.progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
+open State in
+theorem Progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
   cases s with
   | prog  => exact ⟨0, by simp [stepN, isProg]⟩
   | done  => exact ⟨0, by simp [stepN,  isEnd]⟩
@@ -115,36 +84,123 @@ theorem State.progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
   | ret  v c k => exact retProgression
   | expr e c k => exact exprProgression
 
--- def Continuation.extends (k₀ : Continuation) : Continuation → Prop
---   | k@(seq _ k') => k'.extends k₀ → k.extends k₀
---   | _ => sorry
+def State.reachesWith (s₁ s₂ : State) (f : State → Prop) : Prop :=
+  ∃ n, s₁^[n] = s₂ ∧ ∀ i, i ≤ n → f (s₁^[i])
 
 inductive Continuation.derives (k₀ : Continuation) : Continuation → Prop
-  | id   : derives k₀ k₀
-  | seq  : derives k₀ k → derives k₀ (.seq _ k)
-  | decl : derives k₀ k → derives k₀ (.decl _ k)
-  | fork : derives k₀ k → derives k₀ (.fork _ _ _ k)
-  | loop : derives k₀ k → derives k₀ (.loop _ _ k)
+  | byId     : derives k₀ k₀
+  | bySeq    : derives k₀ k → derives k₀ (.seq      _ k)
+  | byDecl   : derives k₀ k → derives k₀ (.decl     _ k)
+  | byFork   : derives k₀ k → derives k₀ (.fork _ _ _ k)
+  | byLoop   : derives k₀ k → derives k₀ (.loop   _ _ k)
+  | byUnOp   : derives k₀ k → derives k₀ (.unOp   _ _ k)
+  | byBinOp₁ : derives k₀ k → derives k₀ (.binOp₁ _ _ k)
+  | byBinOp₂ : derives k₀ k → derives k₀ (.binOp₂ _ _ k)
+  | byApp    : derives k₀ k → derives k₀ (.app    _ _ k)
+  | byBlock  : derives k₀ k → derives k₀ (.block    _ k)
+  | byPrint  : derives k₀ k → derives k₀ (.print      k)
 
-def State.context : State → Context
-  | .ret   _ c _ => c
-  | .prog  _ c _ => c
-  | .expr  _ c _ => c
-  | .error _ c _ => c
-  | .done  _ c   => c
+open Continuation.derives
 
-def State.derives (k₀ : Continuation) : State → Prop
-| .ret  _ _ k => k₀.derives k
-| .prog _ _ k => k₀.derives k
-| .expr _ _ k => k₀.derives k
-| .error ..   => False
-| .done  ..   => False
+def State.derivesFrom (k₀ : Continuation) : State → Prop
+| ret  _ _ k => k₀.derives k
+| prog _ _ k => k₀.derives k
+| expr _ _ k => k₀.derives k
+| error ..   => False
+| done  ..   => False
 
--- def State.reachesWhile (s₁ s₂ : State) (f : State → Prop) : Prop :=
---   ∃ n, s₁.stepN n = s₂ ∧ ∀ i, i ≤ n → f (s₁.stepN i)
+def bigStep (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
+  ∀ k, (State.prog p c k).reachesWith (.ret v c' k) (·.derivesFrom k)
 
-def State.reachesWhile (s₁ s₂ : State) (f : State → Prop) : Prop :=
-  ∃ n, s₁.stepN n = s₂ ∧ ∀ i, i ≤ n → f (s₁.stepN i)
+notation "⟦" c ", " p "⟧" " » " "⟦" c' ", " v "⟧" => bigStep c p c' v
 
-def bigStep' (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
-  ∀ k, (State.prog p c k).reachesWhile (.ret v c' k) (·.derives k)
+theorem State.skip : ⟦c, .skip⟧ » ⟦c, .nil⟧ := by
+  intro k
+  refine ⟨1, ?_⟩
+  simp [stepN, step]
+  intro i hᵢ
+  cases i with
+  | zero => rw [stepN]; exact byId
+  | succ i =>
+    cases i with
+    | zero => rw [stepN]; exact byId
+    | succ i =>
+    have : i.succ.succ > 1 := by
+      by_cases h : i.succ.succ ≤ 1
+      · by_cases h' : i.succ.succ > 1
+        · exact h'
+        · contradiction
+      · exact Nat.gt_of_not_le h  
+    contradiction
+
+-- set_option hygiene false in
+macro "big_step " h:ident " with "
+    k:ident n:ident h₁:ident h₂:ident : tactic => do
+  `(tactic| have $k:ident : Continuation := default;
+            have $h₁:ident := $h:ident $k:ident;
+            cases $h₁:ident with | intro $n:ident FOO__ => ?_;
+            have $h₁:ident := FOO__.1;
+            have $h₂:ident := FOO__.2;
+            clear FOO__)
+
+open Lean.Elab.Tactic in
+set_option hygiene false in
+elab "small_step " n:ident " at " h:ident : tactic => do
+  evalTactic $ ←`(tactic| cases $n:ident with
+                          | zero => simp [step, stepN] at $h:ident
+                          | succ $n:ident => ?_)
+  evalTactic $ ←`(tactic| simp [step, stepN] at $h:ident)
+
+theorem State.eval (h : ⟦c, .eval e⟧ » ⟦c', v⟧) : c = c' := by
+  big_step h with k n h₁ h₂
+  cases e with
+  | lit l =>
+    small_step n at h₁
+    small_step n at h₁
+    sorry
+  | _ => sorry
+
+theorem State.decl (h : ⟦c, .decl nm p⟧ » ⟦c', v⟧) : c' = c.insert nm v := by
+  big_step h with k n h₁ h₂
+  sorry
+
+def State.canContinue : State → Bool
+  | ret  .. => true
+  | expr .. => true
+  | prog .. => true
+  | _       => false
+
+theorem State.derivesForward {s : State}
+  (hs : s.derivesFrom k) (hc : s.canContinue) :
+    s.step.derivesFrom k := by
+  sorry
+
+theorem State.reachDeterministic'
+  (h : (ret v₁ c₁ k).reachesWith (ret v₂ c₂ k) (·.derivesFrom k)) :
+    v₁ = v₂ ∧ c₁ = c₂ := by
+  cases k with
+  | exit =>
+    cases h with | intro n h =>
+    have h := h.1
+    cases n with
+    | zero   => simp [stepN] at h; exact h
+    | succ n => simp only [stepN, step, doneLoop] at h
+  | seq p k' =>
+    cases h with | intro n h =>
+    have h' := h.2
+    have h := h.1
+    cases n with
+    | zero   => simp [stepN] at h; exact h
+    | succ n =>
+      simp only [stepN, step] at h
+      sorry
+  | _ => sorry
+
+theorem reachDeterministic {s: State} 
+  (h₁ : s.reachesWith (.ret v₁ c₁ k) (·.derivesFrom k))
+  (h₂ : s.reachesWith (.ret v₂ c₂ k) (·.derivesFrom k)) :
+    v₁ = v₂ ∧ c₁ = c₂ := by
+  sorry
+
+theorem Determinism (h₁ : ⟦c, p⟧ » ⟦c₁, v₁⟧) (h₂ : ⟦c, p⟧ » ⟦c₂, v₂⟧) :
+  v₁ = v₂ ∧ c₁ = c₂ := reachDeterministic (h₁ default) (h₂ default)
