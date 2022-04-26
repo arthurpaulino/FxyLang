@@ -54,7 +54,7 @@ set_option hygiene false in
 elab_rules : tactic
   | `(tactic| step_induction $hi $[using $ts,*]? $[with $h]?) => do
     match ts with
-    | none    => evalTactic $ ← `(tactic| have $hi:ident := $hi:ident)
+    | none    => pure ()
     | some ts => evalTactic $ ← `(tactic| have $hi:ident := @$hi:ident $ts*)
     evalTactic $ ← `(tactic| cases $hi:ident with | intro n $hi:ident => ?_)
     match h with
@@ -88,11 +88,43 @@ theorem State.retProgression :
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | unOp o _ _ hi =>
     cases h : v.unOp o with
-    | error => refine ⟨1, by simp [stepN, step, h, isEnd]⟩
+    | error => exact ⟨1, by simp [stepN, step, h, isEnd]⟩
     | ok v' => step_induction hi using v', c with h
   | block c' _ hi => step_induction hi using v, c'
   | print _ hi => step_induction hi using .nil, c with dbgTrace
-  | _ => sorry
+  | binOp₂ o v₂ _ hi =>
+    cases h : v₂.binOp v o with
+    | error => exact ⟨1, by simp [stepN, step, h, isEnd]⟩
+    | ok v' => step_induction hi using v', c with h
+  | binOp₁ o e k hi =>
+    have hi := @hi v c
+    cases hi with | intro n hi =>
+    refine ⟨n + 1, ?_⟩
+    simp [stepN, step]
+    sorry
+  | app e es k hi =>
+    cases v with
+    | lam lm =>
+      cases lm with
+      | mk ns h p =>
+        cases h' : consume p ns es with
+        | none =>
+          -- exact ⟨1, by simp [stepN, step, h', isEnd]⟩
+          refine ⟨1, ?_⟩
+          simp [stepN, step, h']
+          let isOk := fun (s : State) => s.isEnd ∨ s.isProg
+          suffices ∀ o h, o = none →
+            isOk (step.match_2 _ _ _ (fun x h' => State) o h _ _ _) from this _ rfl h'
+          intro o h h2; subst h2; simp
+          sorry
+          -- sorry
+        | some x =>
+          match x with
+          | (some l, p') => sorry
+          | (none,   p')   =>
+            -- exact ⟨1, by simp [stepN, step, h', isProg]⟩
+            sorry
+    | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
 
 #exit
 
