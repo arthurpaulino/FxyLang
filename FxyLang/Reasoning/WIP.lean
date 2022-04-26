@@ -63,6 +63,8 @@ elab_rules : tactic
     | some h => evalTactic $
       ← `(tactic| exact ⟨n + 1, by simp only [stepN, step, $h];exact $hi:ident⟩)
 
+mutual
+
 theorem State.retProgression :
     ∃ n, (ret v c k^[n]).isEnd ∨ (ret v c k^[n]).isProg := by
   induction k generalizing v c with
@@ -112,10 +114,6 @@ theorem State.retProgression :
           -- exact ⟨1, by simp [stepN, step, h', isEnd]⟩
           refine ⟨1, ?_⟩
           simp [stepN, step, h']
-          let isOk := fun (s : State) => s.isEnd ∨ s.isProg
-          suffices ∀ o h, o = none →
-            isOk (step.match_2 _ _ _ (fun x h' => State) o h _ _ _) from this _ rfl h'
-          intro o h h2; subst h2; simp
           sorry
           -- sorry
         | some x =>
@@ -126,8 +124,6 @@ theorem State.retProgression :
             sorry
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
 
-#exit
-
 theorem State.exprProgression :
     ∃ n, (expr e c k^[n]).isEnd ∨ (expr e c k^[n]).isProg := by
   cases e with
@@ -135,19 +131,14 @@ theorem State.exprProgression :
     cases k with
     | exit  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq   => exact ⟨2, by simp [stepN, step, isProg]⟩
-    | decl _ k' => sorry
-    | print  k' => 
-      cases k' with
-      | exit => exact ⟨3, by simp [stepN, step, dbgTrace, isEnd]⟩
-      | seq  => exact ⟨3, by simp [stepN, step, dbgTrace, isProg]⟩
-      | decl nm k'' =>
-        -- cases hi with | intro n hi =>
-        refine ⟨3, ?_⟩
-        simp [stepN, step, dbgTrace]
-        sorry
-      | _ => sorry
+    | decl nm k =>
+      cases @retProgression .nil (c.insert nm (.lit l)) k with | intro n h =>
+      exact ⟨n + 2, by simp only [stepN, step]; exact h⟩
+    | print _ => sorry
     | _     => sorry
   | _     => sorry
+
+end
 
 open State in
 theorem Progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
