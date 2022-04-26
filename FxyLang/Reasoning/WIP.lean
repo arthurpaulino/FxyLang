@@ -43,32 +43,74 @@ theorem State.errorLoop : error t v c^[n] = error t v c := by
   | zero      => rw [stepN]
   | succ _ hi => rw [stepN, step]; exact hi
 
+-- macro "extract " n:ident " from " h:ident : tactic =>
+--   `(tactic| cases $h:ident with | intro $n:ident $h:ident => ?_)
+
+open Lean.Parser.Tactic in
+syntax "step_induction " ident (" using " term,+)? (" with " simpLemma)? :tactic
+
+open Lean.Elab.Tactic in
+set_option hygiene false in
+elab_rules : tactic
+  | `(tactic| step_induction $hi $[using $ts,*]? $[with $h]?) => do
+    match ts with
+    | none    => evalTactic $ ← `(tactic| have $hi:ident := $hi:ident)
+    | some ts => evalTactic $ ← `(tactic| have $hi:ident := @$hi:ident $ts*)
+    evalTactic $ ← `(tactic| cases $hi:ident with | intro n $hi:ident => ?_)
+    match h with
+    | none   => evalTactic $
+      ← `(tactic| exact ⟨n + 1, by simp only [stepN, step]; exact $hi:ident⟩)
+    | some h => evalTactic $
+      ← `(tactic| exact ⟨n + 1, by simp only [stepN, step, $h];exact $hi:ident⟩)
+
 theorem State.retProgression :
     ∃ n, (ret v c k^[n]).isEnd ∨ (ret v c k^[n]).isProg := by
-  cases k with
+  induction k generalizing v c with
   | exit => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | seq  => exact ⟨1, by simp [stepN, step, isProg]⟩
-  | decl =>
-    refine ⟨1, ?_⟩
-    simp [stepN, step]
-    sorry
+  | decl nm _ hi => step_induction hi using .nil, (c.insert nm v)
+  | fork =>
+    cases v with
+    | lit l =>
+      cases l with
+      | bool b => cases b <;> exact ⟨1, by simp [stepN, step, isProg]⟩
+      | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
+    | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
+  | loop _ _ _ hi =>
+    cases v with
+    | lit l =>
+      cases l with
+      | bool b =>
+        cases b with
+        | true  => exact ⟨1, by simp [stepN, step, isProg]⟩
+        | false => step_induction hi using .nil, c
+      | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
+    | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
+  | unOp o _ _ hi =>
+    cases h : v.unOp o with
+    | error => refine ⟨1, by simp [stepN, step, h, isEnd]⟩
+    | ok v' => step_induction hi using v', c with h
+  | block c' _ hi => step_induction hi using v, c'
+  | print _ hi => step_induction hi using .nil, c with dbgTrace
   | _ => sorry
+
+#exit
 
 theorem State.exprProgression :
     ∃ n, (expr e c k^[n]).isEnd ∨ (expr e c k^[n]).isProg := by
   cases e with
   | lit l =>
-    induction k with
+    cases k with
     | exit  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq   => exact ⟨2, by simp [stepN, step, isProg]⟩
-    | decl _ k' hi => sorry
-    | print  k' hi => 
-      induction k' with
+    | decl _ k' => sorry
+    | print  k' => 
+      cases k' with
       | exit => exact ⟨3, by simp [stepN, step, dbgTrace, isEnd]⟩
       | seq  => exact ⟨3, by simp [stepN, step, dbgTrace, isProg]⟩
-      | decl nm k'' hi' =>
-        cases hi with | intro n hi =>
-        refine ⟨n+2, ?_⟩
+      | decl nm k'' =>
+        -- cases hi with | intro n hi =>
+        refine ⟨3, ?_⟩
         simp [stepN, step, dbgTrace]
         sorry
       | _ => sorry
