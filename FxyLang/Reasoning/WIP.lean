@@ -63,8 +63,6 @@ elab_rules : tactic
     | some h => evalTactic $
       ← `(tactic| exact ⟨n + 1, by simp only [stepN, step, $h];exact $hi:ident⟩)
 
-mutual
-
 theorem State.retProgression :
     ∃ n, (ret v c k^[n]).isEnd ∨ (ret v c k^[n]).isProg := by
   induction k generalizing v c with
@@ -98,12 +96,7 @@ theorem State.retProgression :
     cases h : v₂.binOp v o with
     | error => exact ⟨1, by simp [stepN, step, h, isEnd]⟩
     | ok v' => step_induction hi using v', c with h
-  | binOp₁ o e k hi =>
-    have hi := @hi v c
-    cases hi with | intro n hi =>
-    refine ⟨n + 1, ?_⟩
-    simp [stepN, step]
-    sorry
+  | binOp₁ o e k hi => sorry
   | app e es k hi =>
     cases v with
     | lam lm =>
@@ -112,16 +105,8 @@ theorem State.retProgression :
         cases h' : consume p ns es with
         | none =>
           -- exact ⟨1, by simp [stepN, step, h', isEnd]⟩
-          refine ⟨1, ?_⟩
-          simp [stepN, step, h']
           sorry
-          -- sorry
-        | some x =>
-          match x with
-          | (some l, p') => sorry
-          | (none,   p')   =>
-            -- exact ⟨1, by simp [stepN, step, h', isProg]⟩
-            sorry
+        | some x => sorry
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
 
 theorem State.exprProgression :
@@ -129,16 +114,16 @@ theorem State.exprProgression :
   cases e with
   | lit l =>
     cases k with
-    | exit  => exact ⟨2, by simp [stepN, step, isEnd]⟩
-    | seq   => exact ⟨2, by simp [stepN, step, isProg]⟩
+    | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
+    | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
     | decl nm k =>
       cases @retProgression .nil (c.insert nm (.lit l)) k with | intro n h =>
       exact ⟨n + 2, by simp only [stepN, step]; exact h⟩
-    | print _ => sorry
+    | print k =>
+      cases @retProgression .nil c k with | intro n h =>
+      exact ⟨n + 2, by simp only [stepN, step]; exact h⟩
     | _     => sorry
   | _     => sorry
-
-end
 
 open State in
 theorem Progression : ∃ n, (s^[n]).isEnd ∨ (s^[n]).isProg := by
