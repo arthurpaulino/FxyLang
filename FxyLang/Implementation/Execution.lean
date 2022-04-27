@@ -130,8 +130,8 @@ def State.step : State → State
 
   | expr (.lit l) c k => ret (.lit l) c k
   | expr (.list l) c k => ret (.list l) c k
-  | expr (.var n) c k => match c[n] with
-    | none   => error .name c $ notFound n
+  | expr (.var nm) c k => match c[nm] with
+    | none   => error .name c $ notFound nm
     | some v => ret v c k
   | expr (.lam l) c k => ret (.lam l) c k
   | expr (.app e es) c k => expr e c (.app e es k)
