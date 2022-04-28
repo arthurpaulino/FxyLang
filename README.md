@@ -12,7 +12,8 @@ especially Mario Carneiro, Simon Hudon and the Lean developers!
 
 This repository also serves the purpose of being a somewhat brief demonstration
 of the capabilities of Lean 4 as a hybrid of programming language and an
-interactive theorem prover assistant.
+interactive theorem prover assistant. Feel free to continue reading through
+[FxyLang](FxyLang) if you're interested in knowing more about it!
 
 ## Usage
 
@@ -113,9 +114,17 @@ The code above should print out `42` upon execution.
 
 ### Basic operators
 
-Since Fxy is a toy language, it only has two operators: `+` and `*`.
+Since Fxy is a toy language, it only has the following operators:
 
-* For numbers, those are common addition and multiplication respectively
-* For booleans, they represent *or* and *and* respectivaly
-* `+` can concatenate two lists or push a literal to the end of a list
-* `+` can concatenate two strings
+* `+` is the regular addition for numbers. For booleans, it represents an "or".
+For lists, it does concatenations and can also push a literal to its end. For
+strings, `+` does concatenation;
+
+* `*` is the regular multiplication for numbers. For booleans, it represents an
+"and".
+
+* `!` represents a "not" for booleans
+
+* `=`, `!=`, `<`, `<=`, `>` and `>=` are the symbols to encode "equals", "not
+equals", "less than", "less than or equals to", "greater than" and "greater than
+or equals to" respectively.
