@@ -128,3 +128,9 @@ strings, `+` does concatenation;
 * `=`, `!=`, `<`, `<=`, `>` and `>=` are the symbols to encode "equals", "not
 equals", "less than", "less than or equals to", "greater than" and "greater than
 or equals to" respectively.
+
+### Commentaries
+
+Similarly to Python, Fxy uses `#` to represent the beginning of a commentary. So
+everything to the right of a `#` (including the `#` itself) will be filtered out
+before the parsing phase.
