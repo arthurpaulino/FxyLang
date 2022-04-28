@@ -27,8 +27,8 @@ syntax withPosition(
   "[ " colGt literal,* " ]")                : expression
 syntax:51 ident                             : expression
 syntax:49 expression (colGt expression:50)+ : expression
-syntax " ! " expression                     : expression
-syntax expression binop expression          : expression
+syntax:48 " ! " expression                  : expression
+syntax:48 expression binop expression       : expression
 syntax " ( " expression " ) "               : expression
 
 declare_syntax_cat                      program

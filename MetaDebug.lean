@@ -46,14 +46,14 @@ def Program.toString (p : Program) := progToString p
 
 instance : ToString Program := ⟨Program.toString⟩
 
-open Lean Elab Meta
-
+open Lean in
 def mkApp' (name : Name) (e : Expr) : Expr :=
   mkApp (mkConst name) e
 
 def negFloat (f : Float) : Float :=
   -1.0 * f
 
+open Lean Elab Meta in
 def elabLiteral : Syntax → TermElabM Expr
   | `(literal| $n:num) =>
     mkAppM ``Literal.int #[mkApp' ``Int.ofNat (mkNatLit n.toNat)]
@@ -68,9 +68,11 @@ def elabLiteral : Syntax → TermElabM Expr
         mkAppM ``Literal.float #[mkApp' ``negFloat f]
   | _ => throwUnsupportedSyntax
 
+open Lean in
 def elabStringOfIdent (id : Syntax) : Expr :=
   mkStrLit id.getId.toString
 
+open Lean Elab in
 def elabBinOp : Syntax → TermElabM Expr
   | `(binop| +)  => return mkConst ``BinOp.add
   | `(binop| *)  => return mkConst ``BinOp.mul
@@ -82,6 +84,7 @@ def elabBinOp : Syntax → TermElabM Expr
   | `(binop| !=) => return mkConst ``BinOp.ne
   | _ => throwUnsupportedSyntax
 
+open Lean Elab Meta in
 partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| $v:literal) => do mkAppM ``Expression.lit #[← elabLiteral v]
   | `(expression| $n:ident) => mkAppM ``Expression.var #[elabStringOfIdent n]
@@ -103,6 +106,7 @@ partial def elabExpression : Syntax → TermElabM Expr
   | `(expression| ($e:expression)) => elabExpression e
   | _ => throwUnsupportedSyntax
 
+open Lean Elab Meta in
 partial def elabProgram : Syntax → TermElabM Expr
   | `(program| skip)  => return mkConst ``Program.skip
   | `(program| $e:expression) => do
@@ -142,14 +146,19 @@ partial def elabProgram : Syntax → TermElabM Expr
 
 elab ">>" ppLine p:programSeq ppLine "<<" : term => elabProgram p
 
-
-protected def Context.toString (c : _root_.Context) : String :=
+def Context.toString (c : Context) : String :=
   c.toList.foldl (init := "")
     fun acc (n, val) => acc ++ s!"{n}:\t{val}\n"
 
-instance : ToString _root_.Context := ⟨Context.toString⟩
+instance : ToString Context := ⟨Context.toString⟩
 
-open Lean.Elab.Command Lean.Elab.Term in
+def Result.toString : Result → String
+  | val v   => v.toString
+  | err t m => m
+
+instance : ToString Result := ⟨Result.toString⟩
+
+open Lean.Meta Lean.Elab.Command Lean.Elab.Term in
 elab "#assert " x:term:60 " = " y:term:60 : command =>
   liftTermElabM `assert do
     let x ← elabTerm x none
@@ -159,6 +168,19 @@ elab "#assert " x:term:60 " = " y:term:60 : command =>
       throwError "{← reduce x}\n------------------------\n{← reduce y}"
 
 ------- ↓↓ testing area ↓↓
+
+#eval >>
+countTo n :=
+  i := 0
+  while i < n do
+    i := i + 1
+  i
+
+if countTo 42 = 42 then
+  true
+else
+  false
+<<.run
 
 #eval >>
 a := 1 + 1

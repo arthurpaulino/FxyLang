@@ -1,3 +1,10 @@
-f x y z := x + y + z
-q := f 3 4
-!print q 5
+countTo n :=
+  i := 0
+  while i < n do
+    i := i + 1
+  i
+
+if countTo 42 = 42 then
+  !print "42!"
+else
+  !print "not 42 :("

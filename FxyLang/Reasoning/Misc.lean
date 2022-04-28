@@ -25,8 +25,7 @@ theorem State.stepNComp : (s^[n₁])^[n₂] = s^[n₁ + n₂] := by
   induction n₁ generalizing s with
   | zero => simp [stepN]
   | succ n hi =>
-    have := @hi (s^[1])
-    simp only [stepN] at this
+    have := @hi s.step
     rw [stepN, this]
     have : n.succ + n₂ = (n + n₂).succ := by
       simp only [Nat.add_comm, Nat.add_assoc, Nat.add_left_comm]; rfl
