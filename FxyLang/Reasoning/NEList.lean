@@ -141,3 +141,19 @@ theorem NEList.lengthEqToListLength [BEq α] {l : NEList α} :
   | uno _ => simp [length, toList]
   | cons a as hi =>
     simp [length, toList, hi, Nat.add_comm]
+
+theorem NEList.mapEqToListMap {α β : Type} (f : α → β) (l : NEList α) :
+    (l.map f).isEqToList (l.toList.map f) := by
+  induction l with 
+  | uno _ => 
+    simp only [map, List.map, isEqToList]
+  | cons a as hi => 
+    simp only [map, List.map, isEqToList, hi]
+
+theorem NEList.foldlEqToListFoldl {α β : Type} (f : α → β → α) (l : NEList β) (init : α) :
+  l.foldl f init = l.toList.foldl f init := by
+  induction l generalizing init with
+  | uno _ =>
+    simp only [foldl, List.foldl]
+  | cons a as hi =>
+    simp only [foldl, List.foldl, hi]
