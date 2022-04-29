@@ -4,6 +4,11 @@
   Authors: Arthur Paulino
 -/
 
+/-
+This file contains the basic types to support the representation of Fxy
+programs, their memory states
+-/
+
 import FxyLang.Implementation.NEList
 import Std
 
@@ -54,8 +59,30 @@ inductive Value
 
 abbrev Context := Std.HashMap String Value
 
+inductive Continuation
+  | nil    : Continuation
+  | exit   : Continuation → Continuation
+  | seq    : Program → Continuation → Continuation
+  | decl   : String → Continuation → Continuation
+  | fork   : Expression → Program → Program → Continuation → Continuation
+  | loop   : Expression → Program → Continuation → Continuation
+  | unOp   : UnOp → Expression → Continuation → Continuation
+  | binOp₁ : BinOp → Expression → Continuation → Continuation
+  | binOp₂ : BinOp → Value → Continuation → Continuation
+  | app    : Expression → NEList Expression → Continuation → Continuation
+  | block  : Context → Continuation → Continuation
+  | print  : Continuation → Continuation
+  deriving Inhabited
+
 inductive ErrorType
   | name | type | runTime
+
+inductive State
+  | ret   : Context → Continuation → Value      → State
+  | prog  : Context → Continuation → Program    → State
+  | expr  : Context → Continuation → Expression → State
+  | error : Context → Continuation → ErrorType  → String → State
+  | done  : Context → Continuation → Value      → State
 
 inductive Result
   | val : Value → Result

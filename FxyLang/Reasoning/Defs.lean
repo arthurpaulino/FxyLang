@@ -22,9 +22,6 @@ def State.stepN : State → Nat → State
 
 notation s "^" "[" n "]" => State.stepN s n
 
-def State.reachesWith (s₁ s₂ : State) (f : State → Prop) : Prop :=
-  ∃ n, s₁^[n] = s₂ ∧ ∀ i, i ≤ n → f (s₁^[i])
-
 inductive Continuation.extends (k : Continuation) : Continuation → Prop
   | byId     : «extends» k k
   | bySeq    : «extends» k k' → «extends» k (.seq      _ k')
@@ -38,33 +35,36 @@ inductive Continuation.extends (k : Continuation) : Continuation → Prop
   | byBlock  : «extends» k k' → «extends» k (.block    _ k')
   | byPrint  : «extends» k k' → «extends» k (.print      k')
 
-def Continuation.height : Continuation → Nat
-  | exit         => 1
-  | seq      _ k => k.height + 1
-  | decl     _ k => k.height + 1
-  | fork _ _ _ k => k.height + 1
-  | loop   _ _ k => k.height + 1
-  | unOp   _ _ k => k.height + 1
-  | binOp₁ _ _ k => k.height + 1
-  | binOp₂ _ _ k => k.height + 1
-  | app    _ _ k => k.height + 1
-  | block    _ k => k.height + 1
-  | print      k => k.height + 1
+def Continuation.depth : Continuation → Nat
+  | exit       k
+  | seq      _ k
+  | decl     _ k
+  | fork _ _ _ k
+  | loop   _ _ k
+  | unOp   _ _ k
+  | binOp₁ _ _ k
+  | binOp₂ _ _ k
+  | app    _ _ k
+  | block    _ k
+  | print      k => k.depth + 1
+  | nil          => 1
 
-def State.extends (k₀ : Continuation) : State → Prop
-| ret  _ _ k => k₀.extends k
-| prog _ _ k => k₀.extends k
-| expr _ _ k => k₀.extends k
-| error ..   => True
-| done  ..   => False
+def State.continuation : State → Continuation
+  | ret   _ k _
+  | prog  _ k _
+  | expr  _ k _
+  | error _ k _ _
+  | done  _ k _   => k
 
-def State.canContinue : State → Bool
-  | ret  .. => true
-  | expr .. => true
-  | prog .. => true
-  | _       => false
+def State.extends (s s₀ : State) : Prop :=
+  s.continuation.extends s₀.continuation
+
+def State.reaches (s₁ s₂ : State) : Prop :=
+  ∃ n, s₁^[n] = s₂ ∧ ∀ i, i ≤ n → State.extends (s₁^[i]) s₁
+
+notation s₁ " ↠ " s₂ => State.reaches s₁ s₂
 
 def bigStep (c : Context) (p : Program) (c' : Context) (v : Value) : Prop :=
-  ∀ k, (State.prog p c k).reachesWith (.ret v c' k) (·.«extends» k)
+  ∀ k, .prog c k p ↠ .ret c' k v
 
 notation "⟦" c ", " p "⟧" " » " "⟦" c' ", " v "⟧" => bigStep c p c' v

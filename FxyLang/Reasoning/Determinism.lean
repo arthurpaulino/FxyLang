@@ -6,21 +6,30 @@
 
 import FxyLang.Reasoning.Defs
 
-theorem State.extendsForward {s : State}
-  (hs : s.extends k) (hc : s.canContinue) :
+theorem State.stepNComp : (s^[n₁])^[n₂] = s^[n₁ + n₂] := by
+  induction n₁ generalizing s with
+  | zero => simp [stepN]
+  | succ n hi =>
+    rw [stepN, @hi s.step]
+    have : n.succ + n₂ = (n + n₂).succ := by
+      simp only [Nat.add_comm, Nat.add_assoc, Nat.add_left_comm]; rfl
+    rw [this, stepN]
+
+theorem State.powerDeterminism {s : State} (h : s^[n₁] = s^[n₂]) : n₁ = n₂ := by
+  sorry
+
+theorem State.extendsForward {s : State} (hs : s.extends k) :
     s.step.extends k := by
   sorry
 
-theorem State.reachDeterministic'
-  (h : (ret v₁ c₁ k).reachesWith (ret v₂ c₂ k) (·.«extends» k)) :
+theorem State.reachDeterministic' (h : ret c₁ k v₁ ↠ ret c₂ k v₂) :
     v₁ = v₂ ∧ c₁ = c₂ := by
   sorry
 
-theorem reachDeterministic {s: State} 
-  (h₁ : s.reachesWith (.ret v₁ c₁ k) (·.«extends» k))
-  (h₂ : s.reachesWith (.ret v₂ c₂ k) (·.«extends» k)) :
+theorem State.reachDeterministic {s: State}
+  (h₁ : s ↠ ret c₁ k v₁) (h₂ : s ↠ ret c₂ k v₂) :
     v₁ = v₂ ∧ c₁ = c₂ := by
   sorry
 
 theorem Determinism (h₁ : ⟦c, p⟧ » ⟦c₁, v₁⟧) (h₂ : ⟦c, p⟧ » ⟦c₂, v₂⟧) :
-  v₁ = v₂ ∧ c₁ = c₂ := reachDeterministic (h₁ default) (h₂ default)
+  v₁ = v₂ ∧ c₁ = c₂ := State.reachDeterministic (h₁ default) (h₂ default)

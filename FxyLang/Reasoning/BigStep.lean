@@ -8,6 +8,21 @@ import FxyLang.Reasoning.Defs
 
 open Continuation.extends
 
+theorem Continuation.depthOfExtends {k k' : Continuation} (h : k.extends k') :
+    k.depth ≤ k'.depth := by
+  induction h with
+  | byId          => simp
+  | bySeq    _ hi => exact Nat.le_step hi
+  | byDecl   _ hi => exact Nat.le_step hi
+  | byFork   _ hi => exact Nat.le_step hi
+  | byLoop   _ hi => exact Nat.le_step hi
+  | byUnOp   _ hi => exact Nat.le_step hi
+  | byBinOp₁ _ hi => exact Nat.le_step hi
+  | byBinOp₂ _ hi => exact Nat.le_step hi
+  | byApp    _ hi => exact Nat.le_step hi
+  | byBlock  _ hi => exact Nat.le_step hi
+  | byPrint  _ hi => exact Nat.le_step hi
+
 theorem State.skip : ⟦c, .skip⟧ » ⟦c, .nil⟧ := by
   intro k
   refine ⟨1, ?_⟩
@@ -54,6 +69,7 @@ theorem State.eval (h : ⟦c, .eval e⟧ » ⟦c', v⟧) : c = c' := by
     sorry
   | _ => sorry
 
-theorem State.decl (h : ⟦c, .decl nm p⟧ » ⟦c', v⟧) : c' = c.insert nm v := by
+theorem State.decl (h : ⟦c, p⟧ » ⟦c', v⟧) :
+    ⟦c, .decl nm p⟧ » ⟦c.insert nm v, .nil⟧ := by
   big_step h with k n h₁ h₂
   sorry

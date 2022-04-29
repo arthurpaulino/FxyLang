@@ -6,6 +6,16 @@
 
 import FxyLang.Reasoning.Defs
 
+theorem State.doneLoop : done c k v^[n] = done c k v := by
+  induction n with
+  | zero      => rw [stepN]
+  | succ _ hi => rw [stepN, step]; exact hi
+
+theorem State.errorLoop : error c k t v^[n] = error c k t v := by
+  induction n with
+  | zero      => rw [stepN]
+  | succ _ hi => rw [stepN, step]; exact hi
+
 open Lean.Parser.Tactic in
 syntax "step_induction " ident (" using " term,+)?
   (" with " simpLemma)? : tactic
@@ -25,11 +35,12 @@ elab_rules : tactic
       ← `(tactic| exact ⟨n + 1, by simp only [stepN, step, $h];exact $hi:ident⟩)
 
 theorem State.retProgression :
-    ∃ n, (ret v c k^[n]).isEnd ∨ (ret v c k^[n]).isProg := by
-  induction k generalizing v c with
+    ∃ n, (ret c k v^[n]).isEnd ∨ (ret c k v^[n]).isProg := by
+  induction k generalizing c v with
+  | nil  => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | exit => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | seq  => exact ⟨1, by simp [stepN, step, isProg]⟩
-  | decl nm _ hi => step_induction hi using .nil, (c.insert nm v)
+  | decl nm _ hi => step_induction hi using (c.insert nm v), .nil
   | fork =>
     cases v with
     | lit l =>
@@ -44,19 +55,19 @@ theorem State.retProgression :
       | bool b =>
         cases b with
         | true  => exact ⟨1, by simp [stepN, step, isProg]⟩
-        | false => step_induction hi using .nil, c
+        | false => step_induction hi using c, .nil
       | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | unOp o _ _ hi =>
     cases h : v.unOp o with
     | error => exact ⟨1, by simp [stepN, step, h, isEnd]⟩
-    | ok v' => step_induction hi using v', c with h
-  | block c' _ hi => step_induction hi using v, c'
-  | print _ hi => step_induction hi using .nil, c with dbgTrace
+    | ok v' => step_induction hi using c, v' with h
+  | block c' _ hi => step_induction hi using c', v
+  | print _ hi => step_induction hi using c, .nil with dbgTrace
   | binOp₂ o v₂ _ hi =>
     cases h : v₂.binOp v o with
     | error => exact ⟨1, by simp [stepN, step, h, isEnd]⟩
-    | ok v' => step_induction hi using v', c with h
+    | ok v' => step_induction hi using c, v' with h
   | binOp₁ o e k hi =>
     sorry
     -- cases @exprProgression e c (Continuation.binOp₂ o v k) with | intro n h =>
@@ -90,63 +101,67 @@ elab_rules : tactic
       ← `(tactic| exact ⟨n_ + $n, by simp only [stepN, step, $h]; exact h_⟩)
 
 theorem State.exprProgression :
-    ∃ n, (expr e c k^[n]).isEnd ∨ (expr e c k^[n]).isProg := by
+    ∃ n, (expr c k e^[n]).isEnd ∨ (expr c k e^[n]).isProg := by
   cases e with
   | lit l =>
     cases k with
+    | nil  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
-    | decl nm k => step_ret 2 using .nil, c.insert nm (.lit l), k
-    | print k => step_ret 2 using .nil, c, k
-    | fork e pT pF k => step_ret 1 using .lit l, c, .fork e pT pF k
-    | loop e p k => step_ret 1 using .lit l, c, .loop e p k
-    | unOp o e k => step_ret 1 using .lit l, c, .unOp o e k
-    | binOp₁ o e₂ k => step_ret 1 using .lit l, c, .binOp₁ o e₂ k
-    | binOp₂ o v₁ k => step_ret 1 using .lit l, c, .binOp₂ o v₁ k
-    | app e es k => step_ret 1 using .lit l, c, .app e es k
-    | block c' k => step_ret 1 using .lit l, c, .block c' k
+    | decl nm k => step_ret 2 using c.insert nm (.lit l), k, .nil
+    | print k => step_ret 2 using c, k, .nil
+    | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, .lit l
+    | loop e p k => step_ret 1 using c, .loop e p k, .lit l
+    | unOp o e k => step_ret 1 using c, .unOp o e k, .lit l
+    | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, .lit l
+    | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, .lit l
+    | app e es k => step_ret 1 using c, .app e es k, .lit l
+    | block c' k => step_ret 1 using c, .block c' k, .lit l
   | list l =>
     cases k with
+    | nil  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
-    | decl nm k => step_ret 2 using .nil, c.insert nm (.list l), k
-    | print k => step_ret 2 using .nil, c, k
-    | fork e pT pF k => step_ret 1 using .list l, c, .fork e pT pF k
-    | loop e p k => step_ret 1 using .list l, c, .loop e p k
-    | unOp o e k => step_ret 1 using .list l, c, .unOp o e k
-    | binOp₁ o e₂ k => step_ret 1 using .list l, c, .binOp₁ o e₂ k
-    | binOp₂ o v₁ k => step_ret 1 using .list l, c, .binOp₂ o v₁ k
-    | app e es k => step_ret 1 using .list l, c, .app e es k
-    | block c' k => step_ret 1 using .list l, c, .block c' k
+    | decl nm k => step_ret 2 using c.insert nm (.list l), k, .nil
+    | print k => step_ret 2 using c, k, .nil
+    | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, .list l
+    | loop e p k => step_ret 1 using c, .loop e p k, .list l
+    | unOp o e k => step_ret 1 using c, .unOp o e k, .list l
+    | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, .list l
+    | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, .list l
+    | app e es k => step_ret 1 using c, .app e es k, .list l
+    | block c' k => step_ret 1 using c, .block c' k, .list l
   | var nm =>
     cases h' : c[nm] with
     | none => exact ⟨1, by simp [stepN, step, h', isEnd]⟩
     | some v =>
       cases k with
+      | nil  => exact ⟨2, by simp [stepN, step, h', isEnd]⟩
       | exit => exact ⟨2, by simp [stepN, step, h', isEnd]⟩
       | seq  => exact ⟨2, by simp [stepN, step, h', isProg]⟩
-      | decl nm k => step_ret 2 using .nil, c.insert nm v, k with h'
-      | print k => step_ret 2 using .nil, c, k with h'
-      | fork e pT pF k => step_ret 1 using v, c, .fork e pT pF k with h'
-      | loop e p k => step_ret 1 using v, c, .loop e p k with h'
-      | unOp o e k => step_ret 1 using v, c, .unOp o e k with h'
-      | binOp₁ o e₂ k => step_ret 1 using v, c, .binOp₁ o e₂ k with h'
-      | binOp₂ o v₁ k => step_ret 1 using v, c, .binOp₂ o v₁ k with h'
-      | app e es k => step_ret 1 using v, c, .app e es k with h'
-      | block c' k => step_ret 1 using v, c, .block c' k with h'
+      | decl nm k => step_ret 2 using c.insert nm v, k, .nil with h'
+      | print k => step_ret 2 using c, k, .nil with h'
+      | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, v with h'
+      | loop e p k => step_ret 1 using c, .loop e p k, v with h'
+      | unOp o e k => step_ret 1 using c, .unOp o e k, v with h'
+      | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, v with h'
+      | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, v with h'
+      | app e es k => step_ret 1 using c, .app e es k, v with h'
+      | block c' k => step_ret 1 using c, .block c' k, v with h'
   | lam l =>
     cases k with
+    | nil  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
-    | decl nm k => step_ret 2 using .nil, c.insert nm (.lam l), k
-    | print k => step_ret 2 using .nil, c, k
-    | fork e pT pF k => step_ret 1 using .lam l, c, .fork e pT pF k
-    | loop e p k => step_ret 1 using .lam l, c, .loop e p k
-    | unOp o e k => step_ret 1 using .lam l, c, .unOp o e k
-    | binOp₁ o e₂ k => step_ret 1 using .lam l, c, .binOp₁ o e₂ k
-    | binOp₂ o v₁ k => step_ret 1 using .lam l, c, .binOp₂ o v₁ k
-    | app e es k => step_ret 1 using .lam l, c, .app e es k
-    | block c' k => step_ret 1 using .lam l, c, .block c' k
+    | decl nm k => step_ret 2 using c.insert nm (.lam l), k, .nil
+    | print k => step_ret 2 using c, k, .nil
+    | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, .lam l
+    | loop e p k => step_ret 1 using c, .loop e p k, .lam l
+    | unOp o e k => step_ret 1 using c, .unOp o e k, .lam l
+    | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, .lam l
+    | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, .lam l
+    | app e es k => step_ret 1 using c, .app e es k, .lam l
+    | block c' k => step_ret 1 using c, .block c' k, .lam l
   | app e es =>
     sorry
     -- cases @exprProgression e c (.app e es k) with | intro n h =>

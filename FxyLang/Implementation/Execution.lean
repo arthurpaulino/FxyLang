@@ -98,77 +98,58 @@ mutual
 
 end
 
-inductive Continuation
-  | exit   : Continuation
-  | seq    : Program → Continuation → Continuation
-  | decl   : String → Continuation → Continuation
-  | fork   : Expression → Program → Program → Continuation → Continuation
-  | loop   : Expression → Program → Continuation → Continuation
-  | unOp   : UnOp → Expression → Continuation → Continuation
-  | binOp₁ : BinOp → Expression → Continuation → Continuation
-  | binOp₂ : BinOp → Value → Continuation → Continuation
-  | app    : Expression → NEList Expression → Continuation → Continuation
-  | block  : Context → Continuation → Continuation
-  | print  : Continuation → Continuation
-  deriving Inhabited
-
-inductive State
-  | ret   : Value      → Context → Continuation → State
-  | prog  : Program    → Context → Continuation → State
-  | expr  : Expression → Context → Continuation → State
-  | error : ErrorType  → Context → String → State
-  | done  : Value      → Context → State
-
 def State.step : State → State
-  | prog .skip c k => ret .nil c k
-  | prog (.eval e) c k => expr e c k
-  | prog (.seq p₁ p₂) c k => prog p₁ c (.seq p₂ k)
-  | prog (.decl n p) c k => prog p c $ .block c (.decl n k)
-  | prog (.fork e pT pF) c k => expr e c (.fork e pT pF k)
-  | prog (.loop e p) c k => expr e c (.loop e p k)
-  | prog (.print e) c k => expr e c (.print k)
+  | prog c k .skip => ret c k .nil
+  | prog c k (.eval e) => expr c k e
+  | prog c k (.seq p₁ p₂) => prog c (.seq p₂ k) p₁
+  | prog c k (.decl n p) => prog c (.block c (.decl n k)) p
+  | prog c k (.fork e pT pF) => expr c (.fork e pT pF k) e
+  | prog c k (.loop e p) => expr c (.loop e p k) e
+  | prog c k (.print e) => expr c (.print k) e
 
-  | expr (.lit l) c k => ret (.lit l) c k
-  | expr (.list l) c k => ret (.list l) c k
-  | expr (.var nm) c k => match c[nm] with
-    | none   => error .name c $ notFound nm
-    | some v => ret v c k
-  | expr (.lam l) c k => ret (.lam l) c k
-  | expr (.app e es) c k => expr e c (.app e es k)
-  | expr (.unOp o e) c k => expr e c (.unOp o e k)
-  | expr (.binOp o e₁ e₂) c k => expr e₁ c (.binOp₁ o e₂ k)
+  | expr c k (.lit l) => ret c k (.lit l)
+  | expr c k (.list l) => ret c k (.list l)
+  | expr c k (.var nm) => match c[nm] with
+    | none   => error c k .name $ notFound nm
+    | some v => ret c k v
+  | expr c k (.lam l) => ret c k (.lam l)
+  | expr c k (.app e es) => expr c (.app e es k) e
+  | expr c k (.unOp o e) => expr c (.unOp o e k) e
+  | expr c k (.binOp o e₁ e₂) => expr c (.binOp₁ o e₂ k) e₁
  
-  | ret v c .exit => done v c
-  | ret v c (.print k) => dbg_trace v; ret .nil c k
-  | ret _ c (.seq p k) => prog p c k
+  | ret c .nil v => done c .nil v
 
-  | ret v _ (.block c k) => ret v c k
+  | ret c (.exit k) v => done c k v
+  | ret c (.print k) v => dbg_trace v; ret c k .nil 
+  | ret c (.seq p k) _ => prog c k p
 
-  | ret v c (.app e es k) => match v with
+  | ret _ (.block c k) v => ret c k v
+
+  | ret c (.app e es k) v => match v with
     | .lam $ .mk ns h p => match h' : consume p ns es with
       | some (some l, p) =>
-        ret (.lam $ .mk l (noDupOfConsumeNoDup h h') p) c k
-      | some (none, p) => prog p c (.block c k)
-      | none => error .runTime c $ wrongNParameters e ns.length es.length
-    | v                 => error .type c $ notAFunction e v
+        ret c k (.lam $ .mk l (noDupOfConsumeNoDup h h') p)
+      | some (none, p) => prog c (.block c k) p
+      | none => error c k .runTime $ wrongNParameters e ns.length es.length
+    | v                 => error c k .type $ notAFunction e v
  
-  | ret (.lit $ .bool true)  c (.fork _ pT _ k) => prog pT c k
-  | ret (.lit $ .bool false) c (.fork _ _ pF k) => prog pF c k
-  | ret v c (.fork e ..) => error .type c $ cantEvalAsBool e v
+  | ret c (.fork _ pT _ k) (.lit $ .bool true)  => prog c k pT
+  | ret c (.fork _ _ pF k) (.lit $ .bool false) => prog c k pF
+  | ret c (.fork e _ _ k) v  => error c k .type $ cantEvalAsBool e v
 
-  | ret (.lit $ .bool true) c (.loop e p k) => prog (.seq p (.loop e p)) c k
-  | ret (.lit $ .bool false) c (.loop _ _ k) => ret .nil c k
-  | ret v c (.loop e ..) => error .type c $ cantEvalAsBool e v
+  | ret c (.loop e p k) (.lit $ .bool true) => prog c k (.seq p (.loop e p))
+  | ret c (.loop _ _ k) (.lit $ .bool false) => ret c k .nil
+  | ret c (.loop e _ k) v => error c k .type $ cantEvalAsBool e v
 
-  | ret v c (.decl n k) => ret .nil (c.insert n v) k
+  | ret c (.decl n k) v => ret (c.insert n v) k .nil
 
-  | ret v c (.unOp o e k) => match v.unOp o with
-    | .error m => error .type c m
-    | .ok    v => ret v c k
-  | ret v₁ c (.binOp₁ o e₂ k) => expr e₂ c (.binOp₂ o v₁ k)
-  | ret v₂ c (.binOp₂ o v₁ k) => match v₁.binOp v₂ o with
-    | .error m => error .type c m
-    | .ok    v => ret v c k
+  | ret c (.unOp o e k) v => match v.unOp o with
+    | .error m => error c k .type m
+    | .ok    v => ret c k v
+  | ret c (.binOp₁ o e₂ k) v₁ => expr c (.binOp₂ o v₁ k) e₂
+  | ret c (.binOp₂ o v₁ k) v₂ => match v₁.binOp v₂ o with
+    | .error m => error c k .type m
+    | .ok    v => ret c k v
 
   | s@(error ..) => s
   | s@(done ..)  => s
@@ -176,7 +157,7 @@ def State.step : State → State
 partial def Program.run (p : Program) : Context × Result :=
   let rec run' (s : State) : Context × Result :=
     match s.step with
-    | .error t c m => (c, .err t m)
-    | .done  v c   => (c, .val v)
-    | s            => run' s
-  run' $ State.prog p default .exit
+    | .error c _ t m => (c, .err t m)
+    | .done  c _ v   => (c, .val v)
+    | s              => run' s
+  run' $ State.prog default default p
