@@ -1,7 +1,7 @@
 /-
   Copyright (c) 2022 Arthur Paulino. All rights reserved.
   Released under Apache 2.0 license as described in the file LICENSE.
-  Authors: Arthur Paulino
+  Authors: Arthur Paulino, Joseph O
 -/
 
 import FxyLang.Implementation.NEList
@@ -145,15 +145,12 @@ theorem NEList.lengthEqToListLength [BEq α] {l : NEList α} :
 theorem NEList.mapEqToListMap {α β : Type} (f : α → β) (l : NEList α) :
     (l.map f).isEqToList (l.toList.map f) := by
   induction l with 
-  | uno _ => 
-    simp only [map, List.map, isEqToList]
-  | cons a as hi => 
-    simp only [map, List.map, isEqToList, hi]
+  | uno  _      => simp only [map, List.map, isEqToList]
+  | cons _ _ hi => simp only [map, List.map, isEqToList, hi]
 
-theorem NEList.foldlEqToListFoldl {α β : Type} (f : α → β → α) (l : NEList β) (init : α) :
-  l.foldl f init = l.toList.foldl f init := by
-  induction l generalizing init with
-  | uno _ =>
-    simp only [foldl, List.foldl]
-  | cons a as hi =>
-    simp only [foldl, List.foldl, hi]
+theorem NEList.foldlEqToListFoldl {α β : Type}
+  (l : NEList β) (a : α) (f : α → β → α) :
+    l.foldl f a = l.toList.foldl f a := by
+  induction l generalizing a with
+  | uno  _      => simp only [foldl, List.foldl]
+  | cons _ _ hi => simp only [foldl, List.foldl, hi]

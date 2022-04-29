@@ -15,6 +15,11 @@ of the capabilities of Lean 4 as a hybrid of programming language and an
 interactive theorem prover assistant. Feel free to continue reading through
 [FxyLang](FxyLang) if you're interested in knowing more about it!
 
+## Collaborators
+
+* [Arthur Paulino](https://github.com/arthurpaulino)
+* [Joseph O](https://github.com/crabbo-rave)
+
 ## Usage
 
 After cloning the repository, build the binary with `lake build`.
