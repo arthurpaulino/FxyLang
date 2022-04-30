@@ -4,13 +4,13 @@
   Authors: Arthur Paulino
 -/
 
+import FxyLang.Implementation.NEList
+import Std
+
 /-
 This file contains the basic types to support the representation of Fxy
 programs, their memory states and output.
 -/
-
-import FxyLang.Implementation.NEList
-import Std
 
 /-- Literals are the most basic units of memory -/
 inductive Literal
@@ -102,17 +102,27 @@ inductive Continuation
   | print  : Continuation → Continuation
   deriving Inhabited
 
-/-- The type of error that may occur during a  -/
+/-- The type of errors that may occur at execution time
+* `name` represents the error when the program calls an invalid variable name
+* `type` represents errors when evaluating badly typed expressions
+* `runTime` is used when the program passes too many parameters to a function -/
 inductive ErrorType
   | name | type | runTime
 
+/-- The `State` of a program can be
+* `prog` : ready to execute a program
+* `expr` : ready to evaluate an expression
+* `ret`  : just finished the evaluation of an expression
+* `error`: signals that some error happened
+* `done` : nothing else to do! -/
 inductive State
-  | ret   : Context → Continuation → Value      → State
   | prog  : Context → Continuation → Program    → State
   | expr  : Context → Continuation → Expression → State
+  | ret   : Context → Continuation → Value      → State
   | error : Context → Continuation → ErrorType  → String → State
   | done  : Context → Continuation → Value      → State
 
+/-- The final result of a program -/
 inductive Result
   | val : Value → Result
   | err : ErrorType → String → Result

@@ -6,6 +6,15 @@
 
 import FxyLang.Implementation.ASTUtilities
 
+/- 
+This file implements the actual execution of a Fxy program.
+
+There are two ways to run a Fxy program:
+* `Program.run!` is fast but uses code that can't be reasoned on
+* `Program.run` is ~50% slower, but uses a function that implements small step
+semantics and thus can be reasoned on
+-/
+
 def cantEvalAsBool (e : Expression) (v : Value) : String :=
   s!"I can't evaluate '{e}' as a 'bool' because it reduces to '{v}', of " ++
     s!"type '{v.typeStr}'"
@@ -21,6 +30,9 @@ def wrongNParameters (e : Expression) (allowed provided : Nat) : String :=
   s!"I can't apply {provided} arguments to '{e}' because the maximum " ++
     s!"allowed is {allowed}"
 
+/-- Takes a list of expressions and matches each element with an element from a
+list of strings. For each match, it adds a declaration in the beginning of a
+given program, returning such modified program -/
 def consume (p : Program) :
     NEList String → NEList Expression →
       Option ((Option (NEList String)) × Program)
