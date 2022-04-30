@@ -36,7 +36,6 @@ inductive Continuation.extends (k : Continuation) : Continuation → Prop
   | byPrint  : «extends» k k' → «extends» k (.print      k')
 
 def Continuation.depth : Continuation → Nat
-  | exit       k
   | seq      _ k
   | decl     _ k
   | fork _ _ _ k
@@ -47,7 +46,7 @@ def Continuation.depth : Continuation → Nat
   | app    _ _ k
   | block    _ k
   | print      k => k.depth + 1
-  | nil          => 1
+  | exit         => 1
 
 def State.continuation : State → Continuation
   | ret   _ k _

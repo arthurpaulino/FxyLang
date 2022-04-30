@@ -41,6 +41,8 @@ def consume (p : Program) :
   | .uno  n,    .uno  e    => some (none, .seq (.decl n (.eval e)) p)
   | .uno  _,    .cons ..   => none
 
+/-- Consuming elements from a non-duplicated NEList results in a non-duplicated
+NEList -/
 theorem noDupOfConsumeNoDup
   (h : ns.noDup) (h' : consume p' ns es = some (some l, p)) :
     l.noDup = true := by
@@ -128,11 +130,11 @@ def State.step : State → State
   | expr c k (.app e es) => expr c (.app e es k) e
   | expr c k (.unOp o e) => expr c (.unOp o e k) e
   | expr c k (.binOp o e₁ e₂) => expr c (.binOp₁ o e₂ k) e₁
- 
-  | ret c .nil v => done c .nil v
 
-  | ret c (.exit k) v => done c k v
-  | ret c (.print k) v => dbg_trace v; ret c k .nil 
+  | ret c .exit v => done c .exit v
+
+  | ret c (.print k) v => dbg_trace v; ret c k .nil
+
   | ret c (.seq p k) _ => prog c k p
 
   | ret _ (.block c k) v => ret c k v
@@ -158,6 +160,7 @@ def State.step : State → State
   | ret c (.unOp o e k) v => match v.unOp o with
     | .error m => error c k .type m
     | .ok    v => ret c k v
+
   | ret c (.binOp₁ o e₂ k) v₁ => expr c (.binOp₂ o v₁ k) e₂
   | ret c (.binOp₂ o v₁ k) v₂ => match v₁.binOp v₂ o with
     | .error m => error c k .type m

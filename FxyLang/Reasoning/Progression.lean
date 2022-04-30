@@ -37,7 +37,6 @@ elab_rules : tactic
 theorem State.retProgression :
     ∃ n, (ret c k v^[n]).isEnd ∨ (ret c k v^[n]).isProg := by
   induction k generalizing c v with
-  | nil  => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | exit => exact ⟨1, by simp [stepN, step, isEnd]⟩
   | seq  => exact ⟨1, by simp [stepN, step, isProg]⟩
   | decl nm _ hi => step_induction hi using (c.insert nm v), .nil
@@ -105,7 +104,6 @@ theorem State.exprProgression :
   cases e with
   | lit l =>
     cases k with
-    | nil  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
     | decl nm k => step_ret 2 using c.insert nm (.lit l), k, .nil
@@ -119,7 +117,6 @@ theorem State.exprProgression :
     | block c' k => step_ret 1 using c, .block c' k, .lit l
   | list l =>
     cases k with
-    | nil  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
     | decl nm k => step_ret 2 using c.insert nm (.list l), k, .nil
@@ -136,7 +133,6 @@ theorem State.exprProgression :
     | none => exact ⟨1, by simp [stepN, step, h', isEnd]⟩
     | some v =>
       cases k with
-      | nil  => exact ⟨2, by simp [stepN, step, h', isEnd]⟩
       | exit => exact ⟨2, by simp [stepN, step, h', isEnd]⟩
       | seq  => exact ⟨2, by simp [stepN, step, h', isProg]⟩
       | decl nm k => step_ret 2 using c.insert nm v, k, .nil with h'
@@ -150,7 +146,6 @@ theorem State.exprProgression :
       | block c' k => step_ret 1 using c, .block c' k, v with h'
   | lam l =>
     cases k with
-    | nil  => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | exit => exact ⟨2, by simp [stepN, step, isEnd]⟩
     | seq  => exact ⟨2, by simp [stepN, step, isProg]⟩
     | decl nm k => step_ret 2 using c.insert nm (.lam l), k, .nil
