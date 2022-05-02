@@ -88,6 +88,8 @@ prod23 := prod 2 3
 
 The code above should print out `42` upon execution.
 
+Note: It's also possible to do `!print (prod 2 3) 7`
+
 ### Forks and loops
 
 Fxy supports logic bifurcation and looping via the respective syntaxes:
@@ -116,6 +118,8 @@ else
 ```
 
 The code above should print out `42` upon execution.
+
+Note: if the `else` is omitted, it's replaced with a no-op during parsing.
 
 ### Basic operators
 
