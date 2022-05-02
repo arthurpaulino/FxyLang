@@ -10,6 +10,7 @@ import FxyLang.Implementation.Syntax
 
 open Lean
 
+/-- Parsing a literal syntax -/
 def mkLiteral : Syntax → Except String _root_.Literal
   | `(literal| $[-%$neg]?$n:num) =>
     if neg.isNone
@@ -28,6 +29,7 @@ def mkLiteral : Syntax → Except String _root_.Literal
     | none           => unreachable!
   | _ => throw "error: can't parse value"
 
+/-- Parsing a binary operator syntax -/
 def mkBinOp : Syntax → Except String BinOp
   | `(binop| +)  => return BinOp.add
   | `(binop| *)  => return BinOp.mul
@@ -39,13 +41,14 @@ def mkBinOp : Syntax → Except String BinOp
   | `(binop| !=) => return BinOp.ne
   | _ => throw "error: can't parse binary operator"
 
+/-- Parsing an expression syntax -/
 partial def mkExpression : Syntax → Except String Expression
   | `(expression| $v:literal)     => return .lit (← mkLiteral v)
   | `(expression| !$e:expression) => return .unOp .not (← mkExpression e)
   | `(expression| $n:ident)       => return .var n.getId.toString
   | `(expression| $e:expression $[$es:expression]*) => do
     match ← es.data.mapM mkExpression with
-    | []      => unreachable!
+    | []      => unreachable! -- because `es` uses `+` in the syntax definition
     | e' :: es => return .app (← mkExpression e) (es.toNEList e')
   | `(expression| $l:expression $o:binop $r:expression) =>
     return .binOp (← mkBinOp o) (← mkExpression l) (← mkExpression r)
@@ -54,6 +57,7 @@ partial def mkExpression : Syntax → Except String Expression
   | `(expression| ($e:expression)) => mkExpression e
   | _ => throw "error: can't parse expression"
 
+/-- Parsing a program syntax -/
 partial def mkProgram : Syntax → Except String Program
   | `(program| skip)  => return Program.skip
   | `(program| $e:expression) =>
@@ -68,13 +72,13 @@ partial def mkProgram : Syntax → Except String Program
     | n' :: ns =>
       let n := n.getId.toString
       let nl := ns.toNEList n'
-      if h : nl.noDup then
+      if h : nl.noDup then -- here we need to check for duplications
         return .decl n $ .eval $ .lam $ .mk nl h (← mkProgram p)
       else throw $ s!"error: definition of curried function {n} has " ++
         "duplicated variables"
   | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
-    | none   => pure $ Program.skip
+    | none   => pure $ Program.skip -- `else` was ommitted. Simulate a `skip`
     | some q => mkProgram q
     return .fork (← mkExpression e) (← mkProgram p) q
   | `(program| while $e:expression do $p:programSeq) =>
@@ -82,25 +86,27 @@ partial def mkProgram : Syntax → Except String Program
   | `(program| !print $e:expression) => return .print (← mkExpression e)
   | _ => throw "error: can't parse program"
 
-partial def parseProgram : Environment → String → Except String Program
-  | env, s => do mkProgram (← Parser.runParserCategory env `programSeq s)
+/-- Removes comentaries and replaces tabs by empty spaces -/
+def cleanseLine (l : String) : String :=
+  l.splitOn "#" |>.headD "" |>.trimRight.replace "\t" " "
 
+/-- Glues the elements of a `List String` with a separator -/
 def joinedOn (on : String) : List String → String
   | []            => ""
   | [s]           => s
   | s :: s' :: ss => s ++ on ++ joinedOn on (s' :: ss)
 
-def cleanseLine (l : String) : String :=
-  l.splitOn "#" |>.headD "" |>.trimRight.replace "\t" " "
-
+/-- Cleanse each line and joins them with a "\n" -/
 def cleanseCode (c : String) : String :=
   joinedOn "\n" $
     (c.splitOn "\n" |>.map cleanseLine).filter fun l => ¬ l.isEmpty
 
-def metaParse : String → Environment → MetaM (Option String × Program)
-  | c, env => match parseProgram env (cleanseCode c) with
-    | .error msg => return (some msg, default)
-    | .ok    p   => return (none, p)
+/-- Let's parse our program *as if* we were parsing Lean code -/
+def parseProgram : Environment → String → Except String Program
+  | env, s => do mkProgram (← Parser.runParserCategory env `programSeq s)
 
-def parse : String → Environment → IO (Option String × Program)
-  | c, env => Prod.fst <$> (metaParse c env).run'.toIO {} default
+/-- Calls `parseProgram` with a clean code -/
+def parse : String → Environment → Option String × Program
+  | s, env => match parseProgram env (cleanseCode s) with
+    | .error msg => (some msg, default)
+    | .ok    p   => (none, p)

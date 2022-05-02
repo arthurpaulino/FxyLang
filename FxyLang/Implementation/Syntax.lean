@@ -22,27 +22,27 @@ syntax " > "     : binop
 syntax " >= "    : binop
 
 declare_syntax_cat                            expression
-syntax literal                              : expression
+syntax literal                              : expression -- literal
 syntax withPosition(
-  "[ " colGt literal,* " ]")                : expression
-syntax:51 ident                             : expression
-syntax:49 expression (colGt expression:50)+ : expression
-syntax:48 " ! " expression                  : expression
-syntax:48 expression binop expression       : expression
+  "[ " colGt literal,* " ]")                : expression -- list
+syntax:51 ident                             : expression -- variable
+syntax:49 expression (colGt expression:50)+ : expression -- application
+syntax:48 " ! " expression                  : expression -- the only unary op
+syntax:48 expression binop expression       : expression -- binary operator
 syntax " ( " expression " ) "               : expression
 
 declare_syntax_cat                      program
 declare_syntax_cat                      programSeq
-syntax withPosition((colGe program)+) : programSeq
+syntax withPosition((colGe program)+) : programSeq -- seq
 
 syntax "skip"                                       : program
-syntax withPosition(ident+ colGt " := " programSeq) : program
-syntax expression                                   : program
+syntax withPosition(ident+ colGt " := " programSeq) : program -- decl
+syntax expression                                   : program -- eval
 syntax withPosition(
   "if " programSeq colGe " then "
     colGt programSeq
   (colGe " else "
-    colGt programSeq)?)                             : program
+    colGt programSeq)?)                             : program -- fork
 syntax withPosition("while " programSeq " do "
-  colGt programSeq)                                 : program
-syntax withPosition("!print " colGt expression)     : program
+  colGt programSeq)                                 : program -- loop
+syntax withPosition("!print " colGt expression)     : program -- print

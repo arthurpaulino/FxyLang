@@ -93,7 +93,7 @@ inductive Continuation
   | decl   : String → Continuation → Continuation
   | fork   : Expression → Program → Program → Continuation → Continuation
   | loop   : Expression → Program → Continuation → Continuation
-  | unOp   : UnOp → Expression → Continuation → Continuation
+  | unOp   : UnOp → Continuation → Continuation
   | binOp₁ : BinOp → Expression → Continuation → Continuation
   | binOp₂ : BinOp → Value → Continuation → Continuation
   | app    : Expression → NEList Expression → Continuation → Continuation

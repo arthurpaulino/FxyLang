@@ -76,6 +76,9 @@ the execution of another term of `Program` (see the `app` case)
 
 mutual
 
+  /-- Since we're already in the `partial` realm, let's allow ourselves to be
+  carelessly recursive, always believing that `reduce` will compute *any*
+  expression for us! -/
   partial def reduce (c : Context) : Expression → Result
     | .lit  l => .val $ .lit  l
     | .list l => .val $ .list l
@@ -102,6 +105,8 @@ mutual
       | (er@(.err ..), _)        => er
       | (_, er@(.err ..))        => er
 
+  /-- And here we can allow ourselves to be careless too, trusting on `reduce`
+  as well as on `run!`! -/
   partial def Program.run! (c : Context := default) :
       Program → Context × Result
     | skip      => (c, .val .nil)
@@ -132,63 +137,130 @@ mutual
 
 end
 
+/-- This is the function that will allow us to prove results about the semantics
+of Fxy. Let's dive into its details. -/
 def State.step : State → State
+  /- `skip` just goes straight into returning `nil` -/
   | prog c k .skip => ret c k .nil
+
+  /- `eval` enters the `expr` state for expression evaluation -/
   | prog c k (.eval e) => expr c k e
+
+  /- `seq` runs the first program and stacks the second -/
   | prog c k (.seq p₁ p₂) => prog c (.seq p₂ k) p₁
+
+  /- `decl` calls for the execution of the innermost program and then stores the
+  current context with the `block` continuation, which is recovered later on.
+  This allows us to have functions running with their own contexts, being able
+  to write on them as they need as they will be discarded anyway -/
   | prog c k (.decl n p) => prog c (.block c (.decl n k)) p
+
+  /- `fork`, `loop` and `print` go to the expression evaluation step, keeping
+  track of what needs to be done with the returned value later on -/
   | prog c k (.fork e pT pF) => expr c (.fork e pT pF k) e
   | prog c k (.loop e p) => expr c (.loop e p k) e
   | prog c k (.print e) => expr c (.print k) e
 
+  /- If the expression resulted in a literal, a list or a function, just return
+  them -/
   | expr c k (.lit l) => ret c k (.lit l)
   | expr c k (.list l) => ret c k (.list l)
+  | expr c k (.lam l) => ret c k (.lam l)
+
+  /- If we're supposed to extract the value of a variable, we need to check
+  whether it's available in the context or not -/
   | expr c k (.var nm) => match c[nm] with
     | none   => error c k .name $ notFound nm
     | some v => ret c k v
-  | expr c k (.lam l) => ret c k (.lam l)
+  
+  /- For an application we need to evaluate what we're using to apply. We expect
+  it to be a function! -/
   | expr c k (.app e es) => expr c (.app e es k) e
-  | expr c k (.unOp o e) => expr c (.unOp o e k) e
+
+  /- For the unary operator we have to evaluate the (only) expression first -/
+  | expr c k (.unOp o e) => expr c (.unOp o k) e
+
+  /- For the binary operator, we need to evaluate the first expression first and
+  stack up the evaluation of the second one -/
   | expr c k (.binOp o e₁ e₂) => expr c (.binOp₁ o e₂ k) e₁
 
+  /- The `Continuation.exit` signals that there's nothing else to do -/
   | ret c .exit v => done c .exit v
 
+  /- Here we print the returned value and then return `nil` -/
   | ret c (.print k) v => dbg_trace v; ret c k .nil
 
+  /- When returning from the execution of the first program in a `seq`, we
+  ignore the value and go straight to the execution of the second program -/
   | ret c (.seq p k) _ => prog c k p
 
+  /- Here we do what we promised and recover the original context stacked with
+  the `Continuation.block` constructor -/
   | ret _ (.block c k) v => ret c k v
 
+  /- When returning from an `app` continuation, we need to inspect the value
+  that was returned from the evaluation of the first expression -/
   | ret c (.app e es k) v => match v with
+
+    /- The desired case: it's a function! Let's consume it's parameters -/
     | .lam $ .mk ns h p => match h' : consume p ns es with
+
+      /- When `consume` didn't eat up all the arguments we return an
+      yet-to-be-uncurried function -/
       | some (some l, p) =>
         ret c k (.lam $ .mk l (noDupOfConsumeNoDup h h') p)
+      
+      /- All arguments were consumed: let's run the lambda program and use
+      `block` to save up the context -/
       | some (none, p) => prog c (.block c k) p
+      
+      /- This signals that too many arguments were provided -/
       | none => error c k .runTime $ wrongNParameters e ns.length es.length
+    
+    /- Anything but a function. Error! -/
     | v                 => error c k .type $ notAFunction e v
- 
+
+  /- Now we need to resolve a `fork` given the value returned from the
+  expression. We expext it to be a boolean -/
   | ret c (.fork _ pT _ k) (.lit $ .bool true)  => prog c k pT
   | ret c (.fork _ _ pF k) (.lit $ .bool false) => prog c k pF
+
+  /- Not a boolean. Error! -/
   | ret c (.fork e _ _ k) v  => error c k .type $ cantEvalAsBool e v
 
+  /- Resolving a `loop` is similar to a `fork`. We should expect a boolean, at
+  least. The difference is that in case of `true`, we run the program and stack
+  up the same loop expression and program. In case of `false`, just break the
+  loop and return `nil` -/
   | ret c (.loop e p k) (.lit $ .bool true) => prog c k (.seq p (.loop e p))
   | ret c (.loop _ _ k) (.lit $ .bool false) => ret c k .nil
   | ret c (.loop e _ k) v => error c k .type $ cantEvalAsBool e v
 
-  | ret c (.decl n k) v => ret (c.insert n v) k .nil
+  /- The execution of the `decl` program is returning a value. We can finally
+  add it to the context under the name recovered from the `Continuation.decl` -/
+  | ret c (.decl nm k) v => ret (c.insert nm v) k .nil
 
-  | ret c (.unOp o e k) v => match v.unOp o with
+  /- In the unary operator, let's compute it right away -/
+  | ret c (.unOp o k) v => match v.unOp o with
     | .error m => error c k .type m
     | .ok    v => ret c k v
 
+  /- The binary operator is a bit more laborious. When returning from the
+  evaluation of the first expression, we stack the result and call the
+  evaluation of the second expression -/
   | ret c (.binOp₁ o e₂ k) v₁ => expr c (.binOp₂ o v₁ k) e₂
+  
+  /- Once the second evaluation is complete, we're good to go -/
   | ret c (.binOp₂ o v₁ k) v₂ => match v₁.binOp v₂ o with
     | .error m => error c k .type m
     | .ok    v => ret c k v
 
+  /- `error` and `done` states just loop into themselves! -/
   | s@(error ..) => s
   | s@(done ..)  => s
 
+/-- And now we can finally define our partial function to run a program using
+`step`. It's really simple: call `step` until it yields a value or an error! -/
 partial def Program.run (p : Program) : Context × Result :=
   let rec run' (s : State) : Context × Result :=
     match s.step with

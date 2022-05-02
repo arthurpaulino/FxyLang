@@ -12,7 +12,7 @@ def run (f : String) (fast : Bool) : IO Unit := do
   let code ← IO.FS.readFile ⟨f⟩
   initSearchPath (← Lean.findSysroot) ["build/lib"]
   let env ← importModules [{ module := `FxyLang.Implementation.Parser }] {}
-  match ← parse code env with
+  match parse code env with
   | (none    , p) =>
     match if fast then p.run! else p.run with
     | (_, .err t m) => IO.eprintln s!"{t.toString}: {m}"
