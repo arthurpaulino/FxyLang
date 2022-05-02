@@ -6,10 +6,8 @@
 
 import FxyLang.Implementation.AST
 
-/-
-This file contains auxiliary functions and instances for the types defined in
-`AST.lean`.
--/
+/- This file contains auxiliary functions and instances for the types defined in
+`AST.lean`. -/
 
 def Literal.typeStr : Literal → String
   | bool  _ => "bool"

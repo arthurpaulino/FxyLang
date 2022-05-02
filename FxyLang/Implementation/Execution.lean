@@ -6,13 +6,22 @@
 
 import FxyLang.Implementation.ASTUtilities
 
-/- 
-This file implements the actual execution of a Fxy program.
+/- Before we proceed, it's important to notice that a function that executes a
+program *has* to be `partial` because programs themselves may loop forever.
 
-There are two ways to run a Fxy program:
+This file contains two partial functions capable of running Fxy programs:
 * `Program.run!` is fast but uses code that can't be reasoned on
 * `Program.run` is ~50% slower, but uses a function that implements small step
 semantics and thus can be reasoned on
+
+Another important detail is that the computation of a `Program` yields an
+intrinsic `Value`:
+* `skip` yields `nil`
+* `eval` yields the `Value` of the expression being evaluated
+* `seq` yields the `Value` of the second `Program`, unless the first one causes
+an error
+* `fork` yields the `Value` of the child `Program` executed
+* `loop` yields `nil` or an error
 -/
 
 def cantEvalAsBool (e : Expression) (v : Value) : String :=
@@ -53,6 +62,17 @@ theorem noDupOfConsumeNoDup
     cases es with
     | uno  _   => simp [consume] at h'; simp only [h.2, ← h'.1]
     | cons _ _ => exact hi h.2 h'
+
+/- Next we're going to define a pair of mutual functions:
+* `reduce` computes over an expression with the goal of extracting a term of
+`Result` from it, which signals either a `Value` or an error.
+* `Program.run!` is similar to `reduce`, but it processes a `Program` instead
+
+They are mutual because *i*) a program may rely on the resolution of expressions
+to move forward (for instance, knowing whether to loop again or not) and *ii*)
+an expression can be the application of a function, which may need to trigger
+the execution of another term of `Program` (see the `app` case)
+-/
 
 mutual
 

@@ -7,10 +7,8 @@
 import FxyLang.Implementation.NEList
 import Std
 
-/-
-This file contains the basic types to support the representation of Fxy
-programs, their memory states and output.
--/
+/- This file contains the basic types to support the representation of Fxy
+programs, their memory states and output. -/
 
 /-- Literals are the most basic units of memory -/
 inductive Literal
@@ -123,7 +121,7 @@ inductive State
   | error : Context → Continuation → ErrorType  → String → State
   | done  : Context → Continuation → Value      → State
 
-/-- The final result of a program -/
+/-- The final result of a computation -/
 inductive Result
   | val : Value → Result
   | err : ErrorType → String → Result
