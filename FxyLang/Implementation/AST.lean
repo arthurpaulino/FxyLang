@@ -87,8 +87,6 @@ expression was evaluated in the first place. Are we in a loop? A fork? Are we
 adding up two numbers? -/
 inductive Continuation
   | exit   : Continuation
-  -- | nil    : Continuation
-  -- | exit   : Continuation → Continuation
   | seq    : Program → Continuation → Continuation
   | decl   : String → Continuation → Continuation
   | fork   : Expression → Program → Program → Continuation → Continuation
