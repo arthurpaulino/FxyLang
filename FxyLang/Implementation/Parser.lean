@@ -8,6 +8,9 @@ import Lean
 import FxyLang.Implementation.AST
 import FxyLang.Implementation.Syntax
 
+/- This file deals with terms of type `Syntax` from Lean's internals, so we're
+going to use the API with functions such as `toNat`, `isStrLit?`, `getId` etc -/
+
 open Lean
 
 /-- Parsing a literal syntax -/
@@ -20,24 +23,24 @@ def mkLiteral : Syntax → Except String _root_.Literal
   | `(literal| false)  => return .bool Bool.false
   | `(literal| $s:str) => match s.isStrLit? with
     | some s => return .str s
-    | none   => unreachable!
+    | none   => unreachable! -- because of `s:str`
   | `(literal| $[-%$neg]?$f:scientific) => match f.isScientificLit? with
     | some (m, s, e) =>
       if neg.isNone
         then return .float $ OfScientific.ofScientific m s e
         else return .float $ - OfScientific.ofScientific m s e
-    | none           => unreachable!
+    | none           => unreachable! -- because of `f:scientific`
   | _ => throw "error: can't parse value"
 
 /-- Parsing a binary operator syntax -/
 def mkBinOp : Syntax → Except String BinOp
-  | `(binop| +)  => return BinOp.add
-  | `(binop| *)  => return BinOp.mul
-  | `(binop| <)  => return BinOp.lt
+  | `(binop| + ) => return BinOp.add
+  | `(binop| * ) => return BinOp.mul
+  | `(binop| < ) => return BinOp.lt
   | `(binop| <=) => return BinOp.le
-  | `(binop| >)  => return BinOp.gt
+  | `(binop| > ) => return BinOp.gt
   | `(binop| >=) => return BinOp.ge
-  | `(binop| =)  => return BinOp.eq
+  | `(binop| = ) => return BinOp.eq
   | `(binop| !=) => return BinOp.ne
   | _ => throw "error: can't parse binary operator"
 
@@ -48,7 +51,7 @@ partial def mkExpression : Syntax → Except String Expression
   | `(expression| $n:ident)       => return .var n.getId.toString
   | `(expression| $e:expression $[$es:expression]*) => do
     match ← es.data.mapM mkExpression with
-    | []      => unreachable! -- because `es` uses `+` in the syntax definition
+    | []       => unreachable! -- because `es` uses `+` in the syntax definition
     | e' :: es => return .app (← mkExpression e) (es.toNEList e')
   | `(expression| $l:expression $o:binop $r:expression) =>
     return .binOp (← mkBinOp o) (← mkExpression l) (← mkExpression r)
@@ -59,22 +62,22 @@ partial def mkExpression : Syntax → Except String Expression
 
 /-- Parsing a program syntax -/
 partial def mkProgram : Syntax → Except String Program
-  | `(program| skip)  => return Program.skip
-  | `(program| $e:expression) =>
-    return .eval (← mkExpression e)
+  | `(program| skip) => return Program.skip
+  | `(program| $e:expression) => return .eval (← mkExpression e)
   | `(programSeq| $p:program $[$ps:program]*) => do
-    ps.foldlM (init := ← mkProgram p) fun a b =>
-      return .seq a (← mkProgram b)
-  | `(program| $n:ident $ns:ident* := $p:programSeq) =>
-    let ns := ns.data.map $ fun i => i.getId.toString
+    -- call `mkProgram` recursively and join each pair of consecutive programs
+    -- as a `seq` program
+    ps.foldlM (init := ← mkProgram p) fun a b => return .seq a (← mkProgram b)
+  | `(program| $nm:ident $ns:ident* := $p:programSeq) =>
+    let ns : List String := ns.data.map $ fun i => i.getId.toString
     match ns with
-    | []       => return .decl n.getId.toString (← mkProgram p)
-    | n' :: ns =>
-      let n := n.getId.toString
-      let nl := ns.toNEList n'
-      if h : nl.noDup then -- here we need to check for duplications
-        return .decl n $ .eval $ .lam $ .mk nl h (← mkProgram p)
-      else throw $ s!"error: definition of curried function {n} has " ++
+    | []       => return .decl nm.getId.toString (← mkProgram p) -- no arguments
+    | n :: ns => -- arguments signal that a function is being declared
+      let nm := nm.getId.toString -- the name of the function
+      let nl := ns.toNEList n     -- the list of arguments
+      if h : nl.noDup then -- here we need to check for duplicated arguments
+        return .decl nm $ .eval $ .lam $ .mk nl h (← mkProgram p)
+      else throw $ s!"error: the definition of the function {nm} has " ++
         "duplicated variables"
   | `(program| if $e:expression then $p:programSeq $[else $q:programSeq]?) => do
     let q ← match q with
@@ -90,23 +93,17 @@ partial def mkProgram : Syntax → Except String Program
 def cleanseLine (l : String) : String :=
   l.splitOn "#" |>.headD "" |>.trimRight.replace "\t" " "
 
-/-- Glues the elements of a `List String` with a separator -/
-def joinedOn (on : String) : List String → String
-  | []            => ""
-  | [s]           => s
-  | s :: s' :: ss => s ++ on ++ joinedOn on (s' :: ss)
-
 /-- Cleanse each line and joins them with a "\n" -/
 def cleanseCode (c : String) : String :=
-  joinedOn "\n" $
+  "\n".intercalate $
     (c.splitOn "\n" |>.map cleanseLine).filter fun l => ¬ l.isEmpty
 
 /-- Let's parse our program *as if* we were parsing Lean code -/
-def parseProgram : Environment → String → Except String Program
-  | env, s => do mkProgram (← Parser.runParserCategory env `programSeq s)
+def parseProgram (s : String) (env : Environment) : Except String Program := do
+  mkProgram (← Parser.runParserCategory env `programSeq s)
 
 /-- Calls `parseProgram` with a clean code -/
-def parse : String → Environment → Option String × Program
-  | s, env => match parseProgram env (cleanseCode s) with
+def parse (s : String) (env : Environment) : Option String × Program :=
+  match parseProgram (cleanseCode s) env with
     | .error msg => (some msg, default)
     | .ok    p   => (none, p)

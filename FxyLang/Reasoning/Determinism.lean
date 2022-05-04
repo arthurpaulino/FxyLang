@@ -15,11 +15,8 @@ theorem State.stepNComp : (s^[n₁])^[n₂] = s^[n₁ + n₂] := by
       simp only [Nat.add_comm, Nat.add_assoc, Nat.add_left_comm]; rfl
     rw [this, stepN]
 
-theorem State.powerDeterminism {s : State} (h : s^[n₁] = s^[n₂]) : n₁ = n₂ := by
-  sorry
-
-theorem State.extendsForward {s : State} (hs : s.extends k) :
-    s.step.extends k := by
+theorem State.extendsForward {s : State} (hs : s.extends s₀) :
+    s.step.extends s₀ := by
   sorry
 
 theorem State.reachDeterministic' (h : ret c₁ k v₁ ↠ ret c₂ k v₂) :

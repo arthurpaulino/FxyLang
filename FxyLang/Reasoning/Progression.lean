@@ -57,7 +57,7 @@ theorem State.retProgression :
         | false => step_induction hi using c, .nil
       | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
-  | unOp o _ _ hi =>
+  | unOp o _ hi =>
     cases h : v.unOp o with
     | error => exact ⟨1, by simp [stepN, step, h, isEnd]⟩
     | ok v' => step_induction hi using c, v' with h
@@ -78,8 +78,12 @@ theorem State.retProgression :
       | mk ns h p =>
         cases h' : consume p ns es with
         | none =>
-          -- exact ⟨1, by simp [stepN, step, h', isEnd]⟩
-          sorry
+          exists 1
+          simp only [stepN, step]
+          split
+          next l p' h'' => simp only [h'] at h''
+          next h'' => simp only [h'] at h''
+          simp [isEnd]
         | some x => sorry
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
 
@@ -110,7 +114,7 @@ theorem State.exprProgression :
     | print k => step_ret 2 using c, k, .nil
     | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, .lit l
     | loop e p k => step_ret 1 using c, .loop e p k, .lit l
-    | unOp o e k => step_ret 1 using c, .unOp o e k, .lit l
+    | unOp o k => step_ret 1 using c, .unOp o k, .lit l
     | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, .lit l
     | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, .lit l
     | app e es k => step_ret 1 using c, .app e es k, .lit l
@@ -123,7 +127,7 @@ theorem State.exprProgression :
     | print k => step_ret 2 using c, k, .nil
     | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, .list l
     | loop e p k => step_ret 1 using c, .loop e p k, .list l
-    | unOp o e k => step_ret 1 using c, .unOp o e k, .list l
+    | unOp o k => step_ret 1 using c, .unOp o k, .list l
     | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, .list l
     | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, .list l
     | app e es k => step_ret 1 using c, .app e es k, .list l
@@ -139,7 +143,7 @@ theorem State.exprProgression :
       | print k => step_ret 2 using c, k, .nil with h'
       | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, v with h'
       | loop e p k => step_ret 1 using c, .loop e p k, v with h'
-      | unOp o e k => step_ret 1 using c, .unOp o e k, v with h'
+      | unOp o k => step_ret 1 using c, .unOp o k, v with h'
       | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, v with h'
       | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, v with h'
       | app e es k => step_ret 1 using c, .app e es k, v with h'
@@ -152,7 +156,7 @@ theorem State.exprProgression :
     | print k => step_ret 2 using c, k, .nil
     | fork e pT pF k => step_ret 1 using c, .fork e pT pF k, .lam l
     | loop e p k => step_ret 1 using c, .loop e p k, .lam l
-    | unOp o e k => step_ret 1 using c, .unOp o e k, .lam l
+    | unOp o k => step_ret 1 using c, .unOp o k, .lam l
     | binOp₁ o e₂ k => step_ret 1 using c, .binOp₁ o e₂ k, .lam l
     | binOp₂ o v₁ k => step_ret 1 using c, .binOp₂ o v₁ k, .lam l
     | app e es k => step_ret 1 using c, .app e es k, .lam l

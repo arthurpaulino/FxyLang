@@ -28,7 +28,7 @@ inductive Continuation.extends (k : Continuation) : Continuation → Prop
   | byDecl   : «extends» k k' → «extends» k (.decl     _ k')
   | byFork   : «extends» k k' → «extends» k (.fork _ _ _ k')
   | byLoop   : «extends» k k' → «extends» k (.loop   _ _ k')
-  | byUnOp   : «extends» k k' → «extends» k (.unOp   _ _ k')
+  | byUnOp   : «extends» k k' → «extends» k (.unOp     _ k')
   | byBinOp₁ : «extends» k k' → «extends» k (.binOp₁ _ _ k')
   | byBinOp₂ : «extends» k k' → «extends» k (.binOp₂ _ _ k')
   | byApp    : «extends» k k' → «extends» k (.app    _ _ k')
@@ -40,7 +40,7 @@ def Continuation.depth : Continuation → Nat
   | decl     _ k
   | fork _ _ _ k
   | loop   _ _ k
-  | unOp   _ _ k
+  | unOp     _ k
   | binOp₁ _ _ k
   | binOp₂ _ _ k
   | app    _ _ k

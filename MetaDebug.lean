@@ -8,6 +8,9 @@ import Lean
 import FxyLang.Implementation.Execution
 import FxyLang.Implementation.Syntax
 
+/- This file parses Fxy code from a `.lean` file. It uses metaprogramming and is
+meant for testing/debugging purposes, only -/
+
 def Program.getBindersNames? : Program → Option (NEList String)
   | eval (.lam $ .mk ns ..)                    => some ns
   | seq (decl _ (eval (.lam $ .mk ns ..)  )) _ => some ns
