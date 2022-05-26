@@ -257,7 +257,7 @@ g x y := x + y
 f x :=
   a := 1
   b := 2
-  c := g a b -- uncomment this line to see the bug
+  c := g a b
   x
 
 q := f 3
