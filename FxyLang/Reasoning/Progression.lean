@@ -81,10 +81,28 @@ theorem State.retProgression :
           exists 1
           simp only [stepN, step]
           split
-          next l p' h'' => simp only [h'] at h''
+          next h'' => simp only [h'] at h''
           next h'' => simp only [h'] at h''
           simp [isEnd]
-        | some x => sorry
+        | some x =>
+          match x with
+          | (some l, p') =>
+            cases @hi c (.lam $ .mk l (noDupOfConsumeNoDup h h') p') with
+            | intro n hi =>
+              exists n + 1
+              simp [stepN, step]
+              split
+              next h'' =>
+                simp [h'] at h''
+                simp [← h'', hi]
+              all_goals { next h'' => simp [h''] at h' }
+          | (none, _) =>
+            exists 1
+            simp only [stepN, step]
+            split
+            next h'' => simp [h'] at h''
+            simp [isProg]
+            simp [isEnd]
     | _ => exact ⟨1, by simp [stepN, step, isEnd]⟩
 
 open Lean.Parser.Tactic in

@@ -23,8 +23,7 @@ theorem State.reachDeterministic' (h : ret c₁ k v₁ ↠ ret c₂ k v₂) :
     v₁ = v₂ ∧ c₁ = c₂ := by
   sorry
 
-theorem State.reachDeterministic {s: State}
-  (h₁ : s ↠ ret c₁ k v₁) (h₂ : s ↠ ret c₂ k v₂) :
+theorem State.reachDeterministic (h₁ : s ↠ ret c₁ k v₁) (h₂ : s ↠ ret c₂ k v₂) :
     v₁ = v₂ ∧ c₁ = c₂ := by
   sorry
 
